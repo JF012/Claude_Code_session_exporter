@@ -1,4 +1,8 @@
-# 🟣 Claude Code Session Exporter
+<p align="center">
+  <img src="exporter_icon.png" width="120" alt="Claude Code Session Exporter logo">
+</p>
+
+<h1 align="center">Claude Code Session Exporter</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python_3-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3">
