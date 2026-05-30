@@ -1,5 +1,18 @@
 # 🟣 Claude Code Session Exporter
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Python_3-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3">
+  <img src="https://img.shields.io/badge/Tkinter-FFD43B?style=for-the-badge&logo=python&logoColor=black" alt="Tkinter">
+  <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/PowerShell-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell">
+  <img src="https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white" alt="Git">
+  <img src="https://img.shields.io/badge/Markdown-000000?style=for-the-badge&logo=markdown&logoColor=white" alt="Markdown">
+</p>
+
+<p align="center">
+  <em>Built with pure Python &amp; the standard library — zero external dependencies.</em>
+</p>
+
 **Export any Claude Code session to clean, portable Markdown — in one click.**
 
 A lightweight desktop GUI that scans your local Claude Code sessions, lets you pick one,
