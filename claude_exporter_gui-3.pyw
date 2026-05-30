@@ -300,53 +300,77 @@ ICON_B64 = "AAABAAYAEBAAAAEAIAABAQAAZgAAACAgAAABACAAwQEAAGcBAAAwMAAAAQAgAFgCAAAo
 # ══════════════════════════════════════════════════════════════════════════════
 
 class RoundedButton(tk.Button):
-    """Botón estilizado compatible con Python 3.x / tkinter en Windows.
+    """Botón plano con jerarquía visual (compatible con tkinter en Windows).
 
-    Hover más brillante (+45 por canal) que el estado normal.
+    variant="primary"   → fondo ACCENT + texto TEXT  (llamada a la acción principal).
+    variant="secondary" → fondo BG3 + texto ACCENT2, con borde que se ilumina a
+                          ACCENT2 al pasar el mouse (sin robar protagonismo).
     """
-    def __init__(self, parent, text, command, bg=ACCENT, fg=TEXT,
-                 width=200, height=40, radius=10, font_size=11, **kwargs):
-        self._bg_normal  = bg
-        self._bg_hover   = self._lighten(bg, 45)
-        self._bg_dis     = TEXT_DIM
-        self._cmd_real   = command
+    def __init__(self, parent, text, command, variant="primary", font_size=10, **kwargs):
+        self._variant  = variant
+        self._cmd_real = command
+        bg, fg, border = self._palette(variant)
+        self._bg_normal     = bg
+        self._border_normal = border
+        self._bg_hover      = bg if variant == "secondary" else self._lighten(bg, 30)
+        self._border_hover  = ACCENT2 if variant == "secondary" else self._lighten(bg, 30)
         super().__init__(
-            parent,
-            text=text,
-            command=command,
-            bg=bg,
-            fg=fg,
-            activebackground=self._bg_hover,
-            activeforeground=fg,
+            parent, text=text, command=command,
+            bg=bg, fg=fg,
+            activebackground=self._bg_hover, activeforeground=fg,
+            disabledforeground=TEXT_DIM,
             font=("Segoe UI", font_size, "bold"),
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            padx=10,
-            pady=4,
+            relief="flat", bd=0, cursor="hand2",
+            padx=14, pady=9, takefocus=0,
+            highlightthickness=1, highlightbackground=border, highlightcolor=border,
             **kwargs
         )
-        self.bind("<Enter>", lambda e: self["state"] == "normal" and self.config(bg=self._bg_hover))
-        self.bind("<Leave>", lambda e: self["state"] == "normal" and self.config(bg=self._bg_normal))
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
 
     @staticmethod
-    def _lighten(hex_color, amount=45):
+    def _palette(variant):
+        if variant == "secondary":
+            return BG3, ACCENT2, BORDER
+        return ACCENT, TEXT, ACCENT          # primary
+
+    @staticmethod
+    def _lighten(hex_color, amount=30):
         r = min(255, int(hex_color[1:3], 16) + amount)
         g = min(255, int(hex_color[3:5], 16) + amount)
         b = min(255, int(hex_color[5:7], 16) + amount)
         return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _on_enter(self, _):
+        if str(self["state"]) == "disabled":
+            return
+        self.config(bg=self._bg_hover,
+                    highlightbackground=self._border_hover,
+                    highlightcolor=self._border_hover)
+
+    def _on_leave(self, _):
+        if str(self["state"]) == "disabled":
+            return
+        self.config(bg=self._bg_normal,
+                    highlightbackground=self._border_normal,
+                    highlightcolor=self._border_normal)
 
     def set_text(self, text):
         self.config(text=text)
 
     def set_state(self, enabled: bool):
         if enabled:
-            self._bg_normal = ACCENT
-            self._bg_hover  = self._lighten(ACCENT, 45)
-            self.config(state="normal", bg=ACCENT, command=self._cmd_real)
+            bg, fg, border = self._palette(self._variant)
+            self._bg_normal     = bg
+            self._border_normal = border
+            self._bg_hover      = bg if self._variant == "secondary" else self._lighten(bg, 30)
+            self._border_hover  = ACCENT2 if self._variant == "secondary" else self._lighten(bg, 30)
+            self.config(state="normal", bg=bg, fg=fg,
+                        highlightbackground=border, highlightcolor=border,
+                        command=self._cmd_real)
         else:
-            self._bg_normal = self._bg_dis
-            self.config(state="disabled", bg=self._bg_dis)
+            self.config(state="disabled", bg=BG3, fg=TEXT_DIM,
+                        highlightbackground=BORDER, highlightcolor=BORDER)
 
 
 class StatusBar(tk.Frame):
@@ -422,7 +446,6 @@ class App(tk.Tk):
         self._sort_col    = "last_ts"
         self._sort_rev    = True
         self._shimmer_pos = -220
-        self._count_id    = None
 
         self._build_ui()
         self._load_sessions()
@@ -459,142 +482,216 @@ class App(tk.Tk):
     # ── Construcción de la UI ─────────────────────────────────────────────────
 
     def _build_ui(self):
-        # ── Header animado (Canvas: gradiente morado→azul + shimmer) ─────────
-        self._header = tk.Canvas(self, height=64, highlightthickness=0, bd=0, bg=ACCENT)
-        self._header.pack(side="top", fill="x")
+        self._init_style()
 
-        self._header.create_text(20, 32, text="⬡", font=("Segoe UI", 22),
+        # ── Header animado (Canvas: gradiente morado→azul + shimmer) ─────────
+        self._header = tk.Canvas(self, height=66, highlightthickness=0, bd=0, bg=ACCENT)
+        self._header.pack(side="top", fill="x")
+        self._header.create_text(22, 33, text="⬡", font=("Segoe UI", 22),
                                  fill="#ffffff", anchor="w", tags="content")
-        self._header.create_text(54, 24, text="Claude Code Session Exporter",
+        self._header.create_text(56, 25, text="Claude Code Session Exporter",
                                  font=("Segoe UI", 14, "bold"), fill="#ffffff",
                                  anchor="w", tags="content")
-        self._header.create_text(54, 44, text="Selecciona una sesión y expórtala a Markdown",
+        self._header.create_text(56, 45, text="Exporta cualquier sesión de Claude Code a Markdown",
                                  font=("Segoe UI", 9), fill="#e3e6fb", anchor="w", tags="content")
-
-        self._btn_reload = RoundedButton(self._header, "↻  Recargar", self._load_sessions,
-                                         bg=BG3, fg=TEXT, font_size=9)
-        self._btn_reload.place(relx=1.0, rely=0.5, anchor="e", x=-14)
-
         self._header.bind("<Configure>", lambda e: self._draw_header_gradient())
 
-        # ── Borde inferior del header: línea de gradiente del acento ─────────
+        # Borde inferior del header: línea de gradiente del acento
         self._hdr_border = tk.Canvas(self, height=2, highlightthickness=0, bd=0, bg=ACCENT)
         self._hdr_border.pack(side="top", fill="x")
         self._hdr_border.bind("<Configure>", lambda e: self._draw_gradient_border())
 
-        # ── Status bar (abajo del todo) ──────────────────────────────────────
+        # ── Status bar (abajo del todo; el borde va justo encima) ────────────
         self._status = StatusBar(self)
         self._status.pack(side="bottom", fill="x")
         tk.Frame(self, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
-        # ── Panel inferior (carpeta destino + botones) ───────────────────────
-        bottom = tk.Frame(self, bg=BG2, height=80)
-        bottom.pack(side="bottom", fill="x")
-        bottom.pack_propagate(False)
+        # ── Cuerpo dividido: Sidebar (BG2) │ separador 1px │ Grid (BG) ───────
+        body = tk.Frame(self, bg=BG)
+        body.pack(side="top", fill="both", expand=True)
 
-        dir_row = tk.Frame(bottom, bg=BG2)
-        dir_row.pack(fill="x", padx=18, pady=(10, 4))
-        tk.Label(dir_row, text="Guardar en:", font=("Segoe UI", 9),
-                 bg=BG2, fg=TEXT_DIM).pack(side="left")
-        self._dir_var = tk.StringVar(value=str(self._out_dir))
-        dir_entry = tk.Entry(dir_row, textvariable=self._dir_var,
-                             font=("Segoe UI", 9), bg=BG3, fg=TEXT,
-                             insertbackground=ACCENT, relief="flat",
-                             highlightthickness=1, highlightbackground=BORDER,
-                             highlightcolor=ACCENT, width=52)
-        dir_entry.pack(side="left", ipady=4, padx=(6, 4))
-        RoundedButton(dir_row, "📁  Cambiar", self._pick_dir,
-                      bg=BG3, fg=TEXT, font_size=9).pack(side="left")
+        sidebar = tk.Frame(body, bg=BG2, width=288)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+        tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")   # separador sutil
+        main = tk.Frame(body, bg=BG)
+        main.pack(side="left", fill="both", expand=True)
 
-        btn_row = tk.Frame(bottom, bg=BG2)
-        btn_row.pack(anchor="e", padx=18)
-        self._btn_shortcut = RoundedButton(btn_row, "🔗  Crear acceso directo",
-                                           self._create_shortcut, bg="#2a2d45",
-                                           fg=TEXT, font_size=9)
-        self._btn_shortcut.pack(side="left", padx=(0, 10))
-        self._btn_export = RoundedButton(btn_row, "⬇  Exportar sesión", self._export,
-                                         bg=ACCENT, fg=TEXT, font_size=10)
-        self._btn_export.pack(side="left")
+        self._build_sidebar(sidebar)
+        self._build_main(main)
 
-        tk.Frame(self, bg=BORDER, height=1).pack(side="bottom", fill="x")
+        # Arrancar la animación del shimmer del header
+        self.after(250, self._animate_shimmer)
 
-        # ── Cuerpo: Canvas con gradiente diagonal sutil (BG→BG2→BG3) ─────────
-        #    Sobre él van el buscador y la tabla (la tabla mantiene fondo sólido).
-        self._body = tk.Canvas(self, highlightthickness=0, bd=0, bg=BG)
-        self._body.pack(side="top", fill="both", expand=True)
-        self._body.bind("<Configure>", self._on_body_configure)
+    # ── Estilos ttk (configurar antes de instanciar los widgets) ──────────────
 
-        # Buscador (sobre el gradiente)
-        self._body.create_text(26, 30, text="🔍", font=("Segoe UI", 12),
-                               fill=TEXT_DIM, anchor="w", tags="ui")
-        self._search_var = tk.StringVar()
+    def _init_style(self):
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        # Data grid sobre el fondo más oscuro (BG)
+        style.configure("Split.Treeview",
+                        background=BG, fieldbackground=BG, foreground=TEXT,
+                        rowheight=34, font=("Segoe UI", 10), borderwidth=0)
+        # Encabezados: BG2, texto atenuado en mayúsculas/negrita
+        style.configure("Split.Treeview.Heading",
+                        background=BG2, foreground=TEXT_DIM,
+                        font=("Segoe UI", 8, "bold"), relief="flat",
+                        borderwidth=0, padding=(10, 10))
+        style.map("Split.Treeview",
+                  background=[("selected", ACCENT)],
+                  foreground=[("selected", "#ffffff")])
+        style.map("Split.Treeview.Heading",
+                  background=[("active", BG3)], foreground=[("active", TEXT)])
+        # Scrollbar oscuro acorde a la paleta
+        style.configure("Dark.Vertical.TScrollbar",
+                        background=BG3, troughcolor=BG, bordercolor=BG,
+                        arrowcolor=TEXT_DIM, relief="flat")
+        style.map("Dark.Vertical.TScrollbar", background=[("active", BORDER)])
+
+    # ── Panel de controles (sidebar) ──────────────────────────────────────────
+
+    def _build_sidebar(self, parent):
+        sb = tk.Frame(parent, bg=BG2)
+        sb.pack(fill="both", expand=True, padx=15, pady=15)
+
+        def section(text):
+            tk.Label(sb, text=text, bg=BG2, fg=TEXT_DIM,
+                     font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 6))
+
+        # ── Filtros ──────────────────────────────────────────────────────
+        section("F I L T R O S")
+        self._search_var   = tk.StringVar()
+        self._search_ph    = "Buscar nombre, proyecto o fecha…"
+        self._search_is_ph = False
+        self._search_entry = tk.Entry(
+            sb, textvariable=self._search_var, font=("Segoe UI", 10),
+            bg=BG3, fg=TEXT, insertbackground=ACCENT, relief="flat",
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT)
+        self._search_entry.pack(fill="x", ipady=6)
         self._search_var.trace_add("write", lambda *_: self._filter_sessions())
-        entry = tk.Entry(self._body, textvariable=self._search_var,
-                         font=("Segoe UI", 10), bg=BG3, fg=TEXT,
-                         insertbackground=ACCENT, relief="flat",
-                         highlightthickness=1, highlightbackground=BORDER,
-                         highlightcolor=ACCENT)
-        entry.place(x=48, y=14, relwidth=1.0, width=-210, height=32)
-        self._count_id = self._body.create_text(0, 30, text="", anchor="e",
-                                                font=("Segoe UI", 9), fill=TEXT_DIM,
-                                                tags="ui")
+        self._search_entry.bind("<FocusIn>",  self._search_focus_in)
+        self._search_entry.bind("<FocusOut>", self._search_focus_out)
+        self._apply_search_placeholder()
 
-        # Tabla de sesiones (frame opaco sobre el gradiente → legibilidad)
-        table_frame = tk.Frame(self._body, bg=BG)
-        table_frame.place(x=18, y=54, relwidth=1.0, width=-36,
-                          relheight=1.0, height=-66)
+        # ── Exportación ──────────────────────────────────────────────────
+        tk.Frame(sb, bg=BG2, height=18).pack()
+        section("E X P O R T A C I Ó N")
+        tk.Label(sb, text="Guardar en", bg=BG2, fg=TEXT_DIM,
+                 font=("Segoe UI", 9)).pack(anchor="w")
+        self._dir_var = tk.StringVar(value=str(self._out_dir))
+        self._dir_entry = tk.Entry(
+            sb, textvariable=self._dir_var, font=("Consolas", 9),
+            bg=BG3, fg=TEXT, insertbackground=ACCENT, relief="flat",
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT)
+        self._dir_entry.pack(fill="x", ipady=5, pady=(4, 8))
+        RoundedButton(sb, "📁  Explorar carpeta", self._pick_dir,
+                      variant="secondary", font_size=9).pack(fill="x")
+
+        # Opción: abrir carpeta al terminar (toggle propio para verse limpio)
+        self._open_after = tk.BooleanVar(value=True)
+        toggle_row = tk.Frame(sb, bg=BG2)
+        toggle_row.pack(fill="x", pady=(12, 2))
+        self._chk = tk.Label(toggle_row, text="☑", bg=BG2, fg=ACCENT2,
+                             font=("Segoe UI", 12), cursor="hand2")
+        self._chk.pack(side="left")
+        chk_lbl = tk.Label(toggle_row, text="  Abrir carpeta al exportar",
+                           bg=BG2, fg=TEXT_DIM, font=("Segoe UI", 9), cursor="hand2")
+        chk_lbl.pack(side="left")
+        self._chk.bind("<Button-1>", self._toggle_open_after)
+        chk_lbl.bind("<Button-1>", self._toggle_open_after)
+
+        tk.Label(sb, text="Formato:  Markdown (.md)", bg=BG2, fg=TEXT_DIM,
+                 font=("Segoe UI", 9)).pack(anchor="w", pady=(2, 0))
+
+        # Espaciador flexible: empuja las acciones al fondo del panel
+        tk.Frame(sb, bg=BG2).pack(fill="both", expand=True)
+
+        # ── Acciones ─────────────────────────────────────────────────────
+        self._btn_export = RoundedButton(sb, "⬇   Exportar sesión", self._export,
+                                         variant="primary", font_size=11)
+        self._btn_export.pack(fill="x", ipady=2)
+        self._btn_export.set_state(False)
+
+        actions = tk.Frame(sb, bg=BG2)
+        actions.pack(fill="x", pady=(8, 0))
+        self._btn_reload = RoundedButton(actions, "↻  Actualizar", self._load_sessions,
+                                         variant="secondary", font_size=9)
+        self._btn_reload.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self._btn_shortcut = RoundedButton(actions, "🔗  Acceso", self._create_shortcut,
+                                           variant="secondary", font_size=9)
+        self._btn_shortcut.pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+    # ── Área principal (data grid / Treeview) ─────────────────────────────────
+
+    def _build_main(self, parent):
+        wrap = tk.Frame(parent, bg=BG)
+        wrap.pack(fill="both", expand=True, padx=15, pady=15)
+
+        head = tk.Frame(wrap, bg=BG)
+        head.pack(fill="x", pady=(0, 10))
+        tk.Label(head, text="Sesiones de Claude Code", bg=BG, fg=TEXT,
+                 font=("Segoe UI", 12, "bold")).pack(side="left")
+        self._count_lbl = tk.Label(head, text="", bg=BG, fg=TEXT_DIM,
+                                   font=("Segoe UI", 9))
+        self._count_lbl.pack(side="right")
+
+        table = tk.Frame(wrap, bg=BG)
+        table.pack(fill="both", expand=True)
 
         cols = ("last_ts", "message_count", "project", "first_user_msg")
         headers = {
-            "last_ts":        "Última actividad",
-            "message_count":  "Msgs",
-            "project":        "Proyecto",
-            "first_user_msg": "Sesión",
+            "last_ts":        "ÚLTIMA ACTIVIDAD",
+            "message_count":  "MSGS",
+            "project":        "PROYECTO",
+            "first_user_msg": "SESIÓN",
         }
-        col_widths = {
-            "last_ts":        140,
-            "message_count":  50,
-            "project":        160,   # ← más angosto: ahora solo el nombre corto
-            "first_user_msg": 430,
-        }
+        widths = {"last_ts": 150, "message_count": 60, "project": 165, "first_user_msg": 430}
 
-        style = ttk.Style(self)
-        style.theme_use("clam")
-        style.configure("Dark.Treeview",
-                        background=BG2, fieldbackground=BG2, foreground=TEXT,
-                        rowheight=30, font=("Segoe UI", 10), borderwidth=0)
-        style.configure("Dark.Treeview.Heading",
-                        background=BG3, foreground=TEXT_DIM,
-                        font=("Segoe UI", 9, "bold"), relief="flat", borderwidth=0)
-        style.map("Dark.Treeview",
-                  background=[("selected", ACCENT)],
-                  foreground=[("selected", "#ffffff")])
-        style.map("Dark.Treeview.Heading", background=[("active", BORDER)])
-
-        self._tree = ttk.Treeview(table_frame, columns=cols, show="headings",
-                                  style="Dark.Treeview", selectmode="browse")
+        self._tree = ttk.Treeview(table, columns=cols, show="headings",
+                                  style="Split.Treeview", selectmode="browse")
         for col in cols:
             self._tree.heading(col, text=headers[col],
                                command=lambda c=col: self._sort_by(c))
             anchor = "center" if col == "message_count" else "w"
-            self._tree.column(col, width=col_widths[col], minwidth=40,
+            self._tree.column(col, width=widths[col], minwidth=44,
                               anchor=anchor, stretch=(col == "first_user_msg"))
 
-        sb = ttk.Scrollbar(table_frame, orient="vertical", command=self._tree.yview)
+        sb = ttk.Scrollbar(table, orient="vertical", command=self._tree.yview,
+                           style="Dark.Vertical.TScrollbar")
         self._tree.configure(yscrollcommand=sb.set)
         self._tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        self._tree.tag_configure("odd",  background=BG2)
-        self._tree.tag_configure("even", background=BG3)
+        # Zebra striping: filas pares BG, impares BG3
+        self._tree.tag_configure("even", background=BG)
+        self._tree.tag_configure("odd",  background=BG3)
         self._tree.bind("<Double-1>", lambda e: self._export())
         self._tree.bind("<<TreeviewSelect>>", self._on_select)
 
-        # Tooltip con la ruta completa del proyecto (al pasar el mouse)
         self._tip = _TreeTooltip(self._tree, self._tooltip_text_for)
 
-        # Arrancar la animación del shimmer del header
-        self.after(250, self._animate_shimmer)
+    # ── Placeholder del buscador + toggle ─────────────────────────────────────
+
+    def _apply_search_placeholder(self):
+        if not self._search_var.get():
+            self._search_is_ph = True
+            self._search_entry.config(fg=TEXT_DIM)
+            self._search_var.set(self._search_ph)
+
+    def _search_focus_in(self, _):
+        if self._search_is_ph:
+            self._search_is_ph = False
+            self._search_var.set("")
+            self._search_entry.config(fg=TEXT)
+
+    def _search_focus_out(self, _):
+        if not self._search_var.get().strip():
+            self._apply_search_placeholder()
+
+    def _toggle_open_after(self, _=None):
+        self._open_after.set(not self._open_after.get())
+        on = self._open_after.get()
+        self._chk.config(text="☑" if on else "☐", fg=ACCENT2 if on else TEXT_DIM)
 
     # ── Gradientes y animación ────────────────────────────────────────────────
 
@@ -667,31 +764,6 @@ class App(tk.Tk):
             r, g, b = _lerp_rgb(_ACCENT_RGB, _ACCENT2_RGB, t)
             c.create_rectangle(x, 0, x + step, 2, fill=_rgb_hex(r, g, b), outline="")
 
-    def _on_body_configure(self, event=None):
-        self._draw_body_gradient()
-        if self._count_id is not None:
-            w = self._body.winfo_width()
-            self._body.coords(self._count_id, w - 18, 30)
-
-    def _draw_body_gradient(self):
-        c = self._body
-        c.delete("grad")
-        w = c.winfo_width()
-        h = c.winfo_height()
-        if w <= 1 or h <= 1:
-            return
-        step = 8
-        for y in range(0, h, step):
-            t = y / max(h - 1, 1)
-            if t < 0.5:
-                rgb = _lerp_rgb(_BG_RGB, _BG2_RGB, t * 2)
-            else:
-                rgb = _lerp_rgb(_BG2_RGB, _BG3_RGB, (t - 0.5) * 2)
-            c.create_rectangle(0, y, w, y + step, fill=_rgb_hex(*rgb),
-                               outline="", tags="grad")
-        c.tag_lower("grad")        # gradiente debajo del texto del buscador
-        c.tag_raise("ui")
-
     # ── Tooltip ───────────────────────────────────────────────────────────────
 
     def _tooltip_text_for(self, session_id):
@@ -735,7 +807,9 @@ class App(tk.Tk):
             )
 
     def _filter_sessions(self):
-        q = self._search_var.get().lower().strip()
+        if not hasattr(self, "_tree"):
+            return
+        q = "" if getattr(self, "_search_is_ph", False) else self._search_var.get().lower().strip()
         visible = [
             s for s in self._sessions
             if not q
@@ -746,9 +820,8 @@ class App(tk.Tk):
             or q in format_ts(s.get("last_ts")).lower()
         ]
         self._populate_tree(visible)
-        if self._count_id is not None:
-            self._body.itemconfig(
-                self._count_id,
+        if getattr(self, "_count_lbl", None) is not None:
+            self._count_lbl.config(
                 text=f"{len(visible)} / {len(self._sessions)}" if q
                      else f"{len(self._sessions)} sesiones"
             )
@@ -832,12 +905,12 @@ class App(tk.Tk):
     def _on_exported(self, out_path: Path, content: str):
         self._btn_export.set_state(True)
         size_kb = len(content.encode("utf-8")) / 1024
-        self._status.ok(f"Guardado → {out_path.name}  ({size_kb:.1f} KB)")
-        if messagebox.askyesno(
-            "¡Listo!",
-            f"Sesión exportada exitosamente:\n\n{out_path}\n\n¿Abrir carpeta?",
-            icon="info"
-        ):
+        has_turns = ("## 🧑" in content) or ("## 🤖" in content)
+        if has_turns:
+            self._status.ok(f"Exportación completada → {out_path.name}  ({size_kb:.1f} KB)")
+        else:
+            self._status.warn(f"Sesión sin contenido legible → {out_path.name}")
+        if self._open_after.get():
             self._open_folder(out_path.parent)
 
     def _open_folder(self, path: Path):
@@ -917,9 +990,10 @@ class _TreeTooltip:
         self._tip = tk.Toplevel(self._tree)
         self._tip.wm_overrideredirect(True)
         self._tip.wm_geometry(f"+{x + 14}+{y + 12}")
-        tk.Label(self._tip, text=text, font=("Segoe UI", 9),
-                 bg="#2a2d45", fg=TEXT, padx=8, pady=4,
-                 relief="solid", bd=1).pack()
+        self._tip.configure(bg=BORDER)               # marco de 1px (BORDER)
+        tk.Label(self._tip, text=text, font=("Consolas", 9),
+                 bg=BG3, fg=TEXT, padx=8, pady=4,
+                 relief="flat", bd=0).pack(padx=1, pady=1)
 
     def _hide(self):
         if self._tip is not None:
