@@ -1,0 +1,9 @@
+﻿# PyInstaller build artifacts
+/build/
+/dist/
+/*.spec
+exporter.ico
+
+# Python
+__pycache__/
+*.pyc

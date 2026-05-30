@@ -19,24 +19,39 @@ from tkinter import ttk, filedialog, messagebox
 # ══════════════════════════════════════════════════════════════════════════════
 #  PALETA DE COLORES
 # ══════════════════════════════════════════════════════════════════════════════
-BG          = "#0f1117"   # fondo principal
-BG2         = "#1a1d27"   # paneles secundarios
-BG3         = "#22263a"   # filas alternas / inputs
-ACCENT      = "#7c5cfc"   # morado Claude
-ACCENT2     = "#5b8dee"   # azul acento
-SUCCESS     = "#3ecf8e"   # verde éxito
-WARNING     = "#f6c344"   # amarillo advertencia
-DANGER      = "#ff6b6b"   # rojo error
-TEXT        = "#e8eaf0"   # texto principal
-TEXT_DIM    = "#6b7280"   # texto secundario
-BORDER      = "#2d3148"   # bordes
+# ── Paleta Glassmorphism Dark ─────────────────────────────────────────────────
+BG_DEEP     = "#050810"   # fondo más oscuro (tabla, status, fondo general)
+BG_PANEL    = "#0d1117"   # paneles principales / inputs / filas normales
+BG_GLASS    = "#111827"   # efecto vidrio / filas alternas
+BG_ROW1     = "#0d1117"   # filas normales
+BG_ROW2     = "#111827"   # filas alternas
+ACCENT      = "#6366f1"   # índigo
+ACCENT2     = "#818cf8"   # índigo claro (hover / MSGS)
+ACCENT_GRD  = "#a78bfa"   # violeta suave (texto de selección)
+PRIMARY_HOVER = "#4f46e5" # hover del botón principal
+SUCCESS     = "#34d399"   # verde esmeralda
+WARNING     = "#fbbf24"   # ámbar
+DANGER      = "#f87171"   # rojo suave
+TEXT        = "#f1f5f9"   # blanco cálido
+TEXT_DIM    = "#64748b"   # gris azulado secundario
+TEXT_FAINT  = "#334155"   # muy tenue (placeholder)
+TEXT_MUTE   = "#94a3b8"   # slate (botones header / proyecto)
+HEAD_TEXT   = "#475569"   # encabezados de tabla
+BORDER      = "#1e293b"   # borde sutil
+HEADER_TOP  = "#0f172a"   # header: arriba
+HEADER_BOT  = "#1e1b4b"   # header: abajo (índigo muy oscuro)
+SEL_BG      = "#1e1b4b"   # fondo de fila seleccionada
 
-# Versiones RGB para interpolar gradientes
-_ACCENT_RGB  = (124, 92, 252)
-_ACCENT2_RGB = (91, 141, 238)
-_BG_RGB      = (15, 17, 23)
-_BG2_RGB     = (26, 29, 39)
-_BG3_RGB     = (34, 38, 58)
+# Aliases de compatibilidad (para referencias existentes)
+BG  = BG_DEEP
+BG2 = BG_PANEL
+BG3 = BG_GLASS
+
+# Versiones RGB para interpolar el gradiente del header
+_HEADER_TOP_RGB = (15, 23, 42)    # #0f172a
+_HEADER_BOT_RGB = (30, 27, 75)    # #1e1b4b
+_ACCENT_RGB     = (99, 102, 241)  # #6366f1
+_ACCENT2_RGB    = (129, 140, 248) # #818cf8
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -309,30 +324,36 @@ class RoundedButton(tk.Button):
     def __init__(self, parent, text, command, variant="primary", font_size=10, **kwargs):
         self._variant  = variant
         self._cmd_real = command
-        bg, fg, border = self._palette(variant)
-        self._bg_normal     = bg
-        self._border_normal = border
-        self._bg_hover      = bg if variant == "secondary" else self._lighten(bg, 30)
-        self._border_hover  = ACCENT2 if variant == "secondary" else self._lighten(bg, 30)
+        s = self._style_for(variant)
+        self._bg_normal     = s["bg"]
+        self._border_normal = s["border"]
+        self._bg_hover      = s["hover_bg"]
+        self._border_hover  = s["hover_border"]
         super().__init__(
             parent, text=text, command=command,
-            bg=bg, fg=fg,
-            activebackground=self._bg_hover, activeforeground=fg,
+            bg=s["bg"], fg=s["fg"],
+            activebackground=s["hover_bg"], activeforeground=s["fg"],
             disabledforeground=TEXT_DIM,
             font=("Segoe UI", font_size, "bold"),
             relief="flat", bd=0, cursor="hand2",
-            padx=14, pady=9, takefocus=0,
-            highlightthickness=1, highlightbackground=border, highlightcolor=border,
+            padx=s["padx"], pady=s["pady"], takefocus=0,
+            highlightthickness=1, highlightbackground=s["border"], highlightcolor=s["border"],
             **kwargs
         )
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
 
     @staticmethod
-    def _palette(variant):
+    def _style_for(variant):
         if variant == "secondary":
-            return BG3, ACCENT2, BORDER
-        return ACCENT, TEXT, ACCENT          # primary
+            return dict(bg=BG_GLASS, fg=ACCENT2, border=BORDER,
+                        hover_bg=BG_GLASS, hover_border=ACCENT2, padx=14, pady=9)
+        if variant == "flat":
+            return dict(bg=BORDER, fg=TEXT_MUTE, border=BORDER,
+                        hover_bg=RoundedButton._lighten(BORDER, 16),
+                        hover_border=ACCENT2, padx=12, pady=7)
+        return dict(bg=ACCENT, fg=TEXT, border=ACCENT,                 # primary
+                    hover_bg=PRIMARY_HOVER, hover_border=PRIMARY_HOVER, padx=22, pady=10)
 
     @staticmethod
     def _lighten(hex_color, amount=30):
@@ -360,26 +381,26 @@ class RoundedButton(tk.Button):
 
     def set_state(self, enabled: bool):
         if enabled:
-            bg, fg, border = self._palette(self._variant)
-            self._bg_normal     = bg
-            self._border_normal = border
-            self._bg_hover      = bg if self._variant == "secondary" else self._lighten(bg, 30)
-            self._border_hover  = ACCENT2 if self._variant == "secondary" else self._lighten(bg, 30)
-            self.config(state="normal", bg=bg, fg=fg,
-                        highlightbackground=border, highlightcolor=border,
+            s = self._style_for(self._variant)
+            self._bg_normal     = s["bg"]
+            self._border_normal = s["border"]
+            self._bg_hover      = s["hover_bg"]
+            self._border_hover  = s["hover_border"]
+            self.config(state="normal", bg=s["bg"], fg=s["fg"],
+                        highlightbackground=s["border"], highlightcolor=s["border"],
                         command=self._cmd_real)
         else:
-            self.config(state="disabled", bg=BG3, fg=TEXT_DIM,
+            self.config(state="disabled", bg=BG_GLASS, fg=TEXT_DIM,
                         highlightbackground=BORDER, highlightcolor=BORDER)
 
 
 class StatusBar(tk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, bg=BG2, height=32)
-        self._dot  = tk.Label(self, text="●", font=("Segoe UI", 10), bg=BG2, fg=TEXT_DIM)
+        super().__init__(parent, bg=BG_DEEP, height=34)
+        self._dot  = tk.Label(self, text="●", font=("Segoe UI", 10), bg=BG_DEEP, fg=TEXT_DIM)
         self._msg  = tk.Label(self, text="Listo", font=("Segoe UI", 9),
-                               bg=BG2, fg=TEXT_DIM, anchor="w")
-        self._dot.pack(side="left", padx=(12, 4))
+                               bg=BG_DEEP, fg=TEXT_DIM, anchor="w")
+        self._dot.pack(side="left", padx=(14, 4), pady=6)
         self._msg.pack(side="left", fill="x", expand=True)
 
     def set(self, text, color=TEXT_DIM):
@@ -409,6 +430,14 @@ def _set_app_user_model_id():
             "JF012.ClaudeCodeSessionExporter")
     except Exception:
         pass
+
+
+def get_base_path():
+    """Directorio base de recursos: el bundle de PyInstaller si está congelado
+    (sys._MEIPASS), o la carpeta del script al ejecutar desde fuente."""
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -445,7 +474,6 @@ class App(tk.Tk):
         self._out_dir     = Path(r"D:\Claude Code sessions")
         self._sort_col    = "last_ts"
         self._sort_rev    = True
-        self._shimmer_pos = -220
 
         self._build_ui()
         self._load_sessions()
@@ -465,11 +493,15 @@ class App(tk.Tk):
         except Exception:
             return None
         candidates = []
-        try:
-            candidates.append(Path(__file__).resolve().parent / "exporter_icon.ico")
-        except Exception:
-            pass
-        candidates.append(Path(tempfile.gettempdir()) / "claude_exporter.ico")
+        if getattr(sys, "frozen", False):
+            # En el .exe empaquetado: extraer a %TEMP%
+            candidates.append(Path(tempfile.gettempdir()) / "claude_exporter.ico")
+        else:
+            try:
+                candidates.append(get_base_path() / "exporter_icon.ico")
+            except Exception:
+                pass
+            candidates.append(Path(tempfile.gettempdir()) / "claude_exporter.ico")
         for target in candidates:
             try:
                 if not target.exists() or target.stat().st_size != len(ico_data):
@@ -484,171 +516,95 @@ class App(tk.Tk):
     def _build_ui(self):
         self._init_style()
 
-        # ── Header animado (Canvas: gradiente morado→azul + shimmer) ─────────
-        self._header = tk.Canvas(self, height=66, highlightthickness=0, bd=0, bg=ACCENT)
+        # ── Header (Canvas con gradiente oscuro → índigo) ────────────────────
+        self._header = tk.Canvas(self, height=58, highlightthickness=0, bd=0, bg=HEADER_TOP)
         self._header.pack(side="top", fill="x")
-        self._header.create_text(22, 33, text="⬡", font=("Segoe UI", 22),
-                                 fill="#ffffff", anchor="w", tags="content")
-        self._header.create_text(56, 25, text="Claude Code Session Exporter",
-                                 font=("Segoe UI", 14, "bold"), fill="#ffffff",
+        self._header.create_text(22, 29, text="⬡", font=("Segoe UI", 19),
+                                 fill=ACCENT, anchor="w", tags="content")
+        self._header.create_text(52, 30, text="CLAUDE EXPORTER",
+                                 font=("Segoe UI", 13, "bold"), fill=TEXT,
                                  anchor="w", tags="content")
-        self._header.create_text(56, 45, text="Exporta cualquier sesión de Claude Code a Markdown",
-                                 font=("Segoe UI", 9), fill="#e3e6fb", anchor="w", tags="content")
         self._header.bind("<Configure>", lambda e: self._draw_header_gradient())
 
-        # Borde inferior del header: línea de gradiente del acento
-        self._hdr_border = tk.Canvas(self, height=2, highlightthickness=0, bd=0, bg=ACCENT)
-        self._hdr_border.pack(side="top", fill="x")
-        self._hdr_border.bind("<Configure>", lambda e: self._draw_gradient_border())
+        # Botones del header (planos), agrupados a la derecha
+        hbtns = tk.Frame(self._header, bg=HEADER_BOT)
+        hbtns.place(relx=1.0, rely=0.5, anchor="e", x=-14)
+        self._btn_reload = RoundedButton(hbtns, "↻  Actualizar", self._load_sessions,
+                                         variant="flat", font_size=9)
+        self._btn_reload.pack(side="left", padx=(0, 8))
+        self._btn_openfolder = RoundedButton(hbtns, "📂  Open Folder", self._open_export_dir,
+                                             variant="flat", font_size=9)
+        self._btn_openfolder.pack(side="left")
 
-        # ── Status bar (abajo del todo; el borde va justo encima) ────────────
+        # Línea inferior del header: 1px en ACCENT
+        tk.Frame(self, bg=ACCENT, height=1).pack(side="top", fill="x")
+
+        # ── Status bar + panel inferior (anclados abajo) ─────────────────────
         self._status = StatusBar(self)
         self._status.pack(side="bottom", fill="x")
-        tk.Frame(self, bg=BORDER, height=1).pack(side="bottom", fill="x")
+        tk.Frame(self, bg=HEADER_TOP, height=1).pack(side="bottom", fill="x")  # sep status
 
-        # ── Cuerpo dividido: Sidebar (BG2) │ separador 1px │ Grid (BG) ───────
-        body = tk.Frame(self, bg=BG)
-        body.pack(side="top", fill="both", expand=True)
+        bottom = tk.Frame(self, bg=BG_PANEL)
+        brow = tk.Frame(bottom, bg=BG_PANEL)
+        brow.pack(fill="x", padx=18, pady=12)
+        tk.Label(brow, text="Guardar en", bg=BG_PANEL, fg=TEXT_DIM,
+                 font=("Segoe UI", 9)).pack(side="left", padx=(0, 8))
+        self._dir_var = tk.StringVar(value=str(self._out_dir))
+        self._dir_entry = tk.Entry(brow, textvariable=self._dir_var,
+                                   font=("Consolas", 9), bg=BG_PANEL, fg=TEXT,
+                                   insertbackground=ACCENT, relief="flat",
+                                   highlightthickness=1, highlightbackground=BORDER,
+                                   highlightcolor=ACCENT)
+        self._dir_entry.pack(side="left", fill="x", expand=True, ipady=5)
+        RoundedButton(brow, "📁  Explorar", self._pick_dir,
+                      variant="flat", font_size=9).pack(side="left", padx=(8, 0))
+        self._btn_shortcut = RoundedButton(brow, "🔗  Crear acceso directo",
+                                           self._create_shortcut, variant="flat", font_size=9)
+        self._btn_shortcut.pack(side="left", padx=(8, 0))
+        self._btn_export = RoundedButton(brow, "⬇   Export to Markdown", self._export,
+                                         variant="primary", font_size=10)
+        self._btn_export.pack(side="left", padx=(8, 0))
+        bottom.pack(side="bottom", fill="x")
+        tk.Frame(self, bg=BORDER, height=1).pack(side="bottom", fill="x")  # borde superior del panel
+        self._btn_export.set_state(False)
 
-        sidebar = tk.Frame(body, bg=BG2, width=288)
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
-        tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")   # separador sutil
-        main = tk.Frame(body, bg=BG)
-        main.pack(side="left", fill="both", expand=True)
-
-        self._build_sidebar(sidebar)
-        self._build_main(main)
-
-        # Arrancar la animación del shimmer del header
-        self.after(250, self._animate_shimmer)
-
-    # ── Estilos ttk (configurar antes de instanciar los widgets) ──────────────
-
-    def _init_style(self):
-        style = ttk.Style(self)
-        style.theme_use("clam")
-        # Data grid sobre el fondo más oscuro (BG)
-        style.configure("Split.Treeview",
-                        background=BG, fieldbackground=BG, foreground=TEXT,
-                        rowheight=34, font=("Segoe UI", 10), borderwidth=0)
-        # Encabezados: BG2, texto atenuado en mayúsculas/negrita
-        style.configure("Split.Treeview.Heading",
-                        background=BG2, foreground=TEXT_DIM,
-                        font=("Segoe UI", 8, "bold"), relief="flat",
-                        borderwidth=0, padding=(10, 10))
-        style.map("Split.Treeview",
-                  background=[("selected", ACCENT)],
-                  foreground=[("selected", "#ffffff")])
-        style.map("Split.Treeview.Heading",
-                  background=[("active", BG3)], foreground=[("active", TEXT)])
-        # Scrollbar oscuro acorde a la paleta
-        style.configure("Dark.Vertical.TScrollbar",
-                        background=BG3, troughcolor=BG, bordercolor=BG,
-                        arrowcolor=TEXT_DIM, relief="flat")
-        style.map("Dark.Vertical.TScrollbar", background=[("active", BORDER)])
-
-    # ── Panel de controles (sidebar) ──────────────────────────────────────────
-
-    def _build_sidebar(self, parent):
-        sb = tk.Frame(parent, bg=BG2)
-        sb.pack(fill="both", expand=True, padx=15, pady=15)
-
-        def section(text):
-            tk.Label(sb, text=text, bg=BG2, fg=TEXT_DIM,
-                     font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 6))
-
-        # ── Filtros ──────────────────────────────────────────────────────
-        section("F I L T R O S")
+        # ── Barra de búsqueda ────────────────────────────────────────────────
+        search = tk.Frame(self, bg=BG_DEEP)
+        search.pack(side="top", fill="x", padx=18, pady=12)
+        tk.Label(search, text="🔍", bg=BG_DEEP, fg=TEXT_DIM,
+                 font=("Segoe UI", 11)).pack(side="left", padx=(0, 8))
         self._search_var   = tk.StringVar()
         self._search_ph    = "Buscar nombre, proyecto o fecha…"
         self._search_is_ph = False
-        self._search_entry = tk.Entry(
-            sb, textvariable=self._search_var, font=("Segoe UI", 10),
-            bg=BG3, fg=TEXT, insertbackground=ACCENT, relief="flat",
-            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT)
-        self._search_entry.pack(fill="x", ipady=6)
+        self._search_entry = tk.Entry(search, textvariable=self._search_var,
+                                      font=("Segoe UI", 10), bg=BG_PANEL, fg=TEXT,
+                                      insertbackground=ACCENT, relief="flat",
+                                      highlightthickness=1, highlightbackground=BORDER,
+                                      highlightcolor=ACCENT)
+        self._search_entry.pack(side="left", fill="x", expand=True, ipady=7)
         self._search_var.trace_add("write", lambda *_: self._filter_sessions())
         self._search_entry.bind("<FocusIn>",  self._search_focus_in)
         self._search_entry.bind("<FocusOut>", self._search_focus_out)
+        self._count_lbl = tk.Label(search, text="", bg=BG_DEEP, fg=TEXT_DIM,
+                                   font=("Segoe UI", 9))
+        self._count_lbl.pack(side="right", padx=(10, 0))
         self._apply_search_placeholder()
 
-        # ── Exportación ──────────────────────────────────────────────────
-        tk.Frame(sb, bg=BG2, height=18).pack()
-        section("E X P O R T A C I Ó N")
-        tk.Label(sb, text="Guardar en", bg=BG2, fg=TEXT_DIM,
-                 font=("Segoe UI", 9)).pack(anchor="w")
-        self._dir_var = tk.StringVar(value=str(self._out_dir))
-        self._dir_entry = tk.Entry(
-            sb, textvariable=self._dir_var, font=("Consolas", 9),
-            bg=BG3, fg=TEXT, insertbackground=ACCENT, relief="flat",
-            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT)
-        self._dir_entry.pack(fill="x", ipady=5, pady=(4, 8))
-        RoundedButton(sb, "📁  Explorar carpeta", self._pick_dir,
-                      variant="secondary", font_size=9).pack(fill="x")
-
-        # Opción: abrir carpeta al terminar (toggle propio para verse limpio)
-        self._open_after = tk.BooleanVar(value=True)
-        toggle_row = tk.Frame(sb, bg=BG2)
-        toggle_row.pack(fill="x", pady=(12, 2))
-        self._chk = tk.Label(toggle_row, text="☑", bg=BG2, fg=ACCENT2,
-                             font=("Segoe UI", 12), cursor="hand2")
-        self._chk.pack(side="left")
-        chk_lbl = tk.Label(toggle_row, text="  Abrir carpeta al exportar",
-                           bg=BG2, fg=TEXT_DIM, font=("Segoe UI", 9), cursor="hand2")
-        chk_lbl.pack(side="left")
-        self._chk.bind("<Button-1>", self._toggle_open_after)
-        chk_lbl.bind("<Button-1>", self._toggle_open_after)
-
-        tk.Label(sb, text="Formato:  Markdown (.md)", bg=BG2, fg=TEXT_DIM,
-                 font=("Segoe UI", 9)).pack(anchor="w", pady=(2, 0))
-
-        # Espaciador flexible: empuja las acciones al fondo del panel
-        tk.Frame(sb, bg=BG2).pack(fill="both", expand=True)
-
-        # ── Acciones ─────────────────────────────────────────────────────
-        self._btn_export = RoundedButton(sb, "⬇   Exportar sesión", self._export,
-                                         variant="primary", font_size=11)
-        self._btn_export.pack(fill="x", ipady=2)
-        self._btn_export.set_state(False)
-
-        actions = tk.Frame(sb, bg=BG2)
-        actions.pack(fill="x", pady=(8, 0))
-        self._btn_reload = RoundedButton(actions, "↻  Actualizar", self._load_sessions,
-                                         variant="secondary", font_size=9)
-        self._btn_reload.pack(side="left", fill="x", expand=True, padx=(0, 4))
-        self._btn_shortcut = RoundedButton(actions, "🔗  Acceso", self._create_shortcut,
-                                           variant="secondary", font_size=9)
-        self._btn_shortcut.pack(side="left", fill="x", expand=True, padx=(4, 0))
-
-    # ── Área principal (data grid / Treeview) ─────────────────────────────────
-
-    def _build_main(self, parent):
-        wrap = tk.Frame(parent, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=15, pady=15)
-
-        head = tk.Frame(wrap, bg=BG)
-        head.pack(fill="x", pady=(0, 10))
-        tk.Label(head, text="Sesiones de Claude Code", bg=BG, fg=TEXT,
-                 font=("Segoe UI", 12, "bold")).pack(side="left")
-        self._count_lbl = tk.Label(head, text="", bg=BG, fg=TEXT_DIM,
-                                   font=("Segoe UI", 9))
-        self._count_lbl.pack(side="right")
-
-        table = tk.Frame(wrap, bg=BG)
-        table.pack(fill="both", expand=True)
+        # ── Tabla de sesiones (área principal sobre el fondo más oscuro) ─────
+        table = tk.Frame(self, bg=BG_DEEP)
+        table.pack(side="top", fill="both", expand=True, padx=18, pady=(0, 12))
 
         cols = ("last_ts", "message_count", "project", "first_user_msg")
         headers = {
-            "last_ts":        "ÚLTIMA ACTIVIDAD",
-            "message_count":  "MSGS",
-            "project":        "PROYECTO",
-            "first_user_msg": "SESIÓN",
+            "last_ts":        "Última actividad".upper(),
+            "message_count":  "Msgs".upper(),
+            "project":        "Proyecto".upper(),
+            "first_user_msg": "Sesión".upper(),
         }
-        widths = {"last_ts": 150, "message_count": 60, "project": 165, "first_user_msg": 430}
+        widths = {"last_ts": 150, "message_count": 60, "project": 170, "first_user_msg": 430}
 
         self._tree = ttk.Treeview(table, columns=cols, show="headings",
-                                  style="Split.Treeview", selectmode="browse")
+                                  style="Glass.Treeview", selectmode="browse")
         for col in cols:
             self._tree.heading(col, text=headers[col],
                                command=lambda c=col: self._sort_by(c))
@@ -657,25 +613,49 @@ class App(tk.Tk):
                               anchor=anchor, stretch=(col == "first_user_msg"))
 
         sb = ttk.Scrollbar(table, orient="vertical", command=self._tree.yview,
-                           style="Dark.Vertical.TScrollbar")
+                           style="Glass.Vertical.TScrollbar")
         self._tree.configure(yscrollcommand=sb.set)
         self._tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        # Zebra striping: filas pares BG, impares BG3
-        self._tree.tag_configure("even", background=BG)
-        self._tree.tag_configure("odd",  background=BG3)
+        # Zebra striping: filas pares BG_ROW1, impares BG_ROW2
+        self._tree.tag_configure("even", background=BG_ROW1)
+        self._tree.tag_configure("odd",  background=BG_ROW2)
         self._tree.bind("<Double-1>", lambda e: self._export())
         self._tree.bind("<<TreeviewSelect>>", self._on_select)
-
         self._tip = _TreeTooltip(self._tree, self._tooltip_text_for)
 
-    # ── Placeholder del buscador + toggle ─────────────────────────────────────
+    # ── Estilos ttk (configurar antes de instanciar los widgets) ──────────────
+
+    def _init_style(self):
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        # Data grid sobre el fondo más oscuro
+        style.configure("Glass.Treeview",
+                        background=BG_DEEP, fieldbackground=BG_DEEP, foreground=TEXT,
+                        rowheight=34, font=("Segoe UI", 10), borderwidth=0)
+        # Encabezados: panel oscuro, texto tenue en MAYÚSCULAS/negrita
+        style.configure("Glass.Treeview.Heading",
+                        background=BG_PANEL, foreground=HEAD_TEXT,
+                        font=("Segoe UI", 8, "bold"), relief="flat",
+                        borderwidth=0, padding=(10, 11))
+        style.map("Glass.Treeview",
+                  background=[("selected", SEL_BG)],
+                  foreground=[("selected", ACCENT_GRD)])
+        style.map("Glass.Treeview.Heading",
+                  background=[("active", BG_GLASS)], foreground=[("active", TEXT_DIM)])
+        # Scrollbar casi invisible
+        style.configure("Glass.Vertical.TScrollbar",
+                        background=BORDER, troughcolor=BG_PANEL, bordercolor=BG_PANEL,
+                        arrowcolor=TEXT_DIM, relief="flat", width=10)
+        style.map("Glass.Vertical.TScrollbar", background=[("active", TEXT_DIM)])
+
+    # ── Placeholder del buscador ──────────────────────────────────────────────
 
     def _apply_search_placeholder(self):
         if not self._search_var.get():
             self._search_is_ph = True
-            self._search_entry.config(fg=TEXT_DIM)
+            self._search_entry.config(fg=TEXT_FAINT)
             self._search_var.set(self._search_ph)
 
     def _search_focus_in(self, _):
@@ -688,12 +668,7 @@ class App(tk.Tk):
         if not self._search_var.get().strip():
             self._apply_search_placeholder()
 
-    def _toggle_open_after(self, _=None):
-        self._open_after.set(not self._open_after.get())
-        on = self._open_after.get()
-        self._chk.config(text="☑" if on else "☐", fg=ACCENT2 if on else TEXT_DIM)
-
-    # ── Gradientes y animación ────────────────────────────────────────────────
+    # ── Header (gradiente glassmorphism estático) ─────────────────────────────
 
     def _draw_header_gradient(self):
         c = self._header
@@ -705,64 +680,11 @@ class App(tk.Tk):
         step = 4
         for x in range(0, w, step):
             t = x / max(w - 1, 1)
-            r, g, b = _lerp_rgb(_ACCENT_RGB, _ACCENT2_RGB, t)
+            r, g, b = _lerp_rgb(_HEADER_TOP_RGB, _HEADER_BOT_RGB, t)
             c.create_rectangle(x, 0, x + step, h, fill=_rgb_hex(r, g, b),
                                outline="", tags="gradient")
-        c.tag_lower("gradient")          # gradiente al fondo
-        c.tag_raise("shimmer")           # shimmer encima del gradiente
-        c.tag_raise("content")           # texto siempre arriba
-
-    def _animate_shimmer(self):
-        c = self._header
-        if not c.winfo_exists():
-            return
-        w = c.winfo_width()
-        h = c.winfo_height()
-        if w <= 1 or h <= 1:
-            self.after(100, self._animate_shimmer)
-            return
-
-        c.delete("shimmer")
-        shimmer_w = 200
-        self._shimmer_pos += 16
-
-        if self._shimmer_pos > w + shimmer_w:
-            # pausa breve antes de reiniciar el barrido
-            self._shimmer_pos = -shimmer_w
-            self.after(1200, self._animate_shimmer)
-            return
-
-        strips = 22
-        strip_w = max(1, shimmer_w // strips)
-        sx = self._shimmer_pos
-        for i in range(strips):
-            x = sx + i * strip_w
-            if x + strip_w < 0 or x >= w:
-                continue
-            t = x / max(w - 1, 1)
-            base = _lerp_rgb(_ACCENT_RGB, _ACCENT2_RGB, t)
-            glow = math.sin((i / max(strips - 1, 1)) * math.pi)   # 0→1→0
-            boost = int(glow * 38)
-            col = (min(255, base[0] + boost),
-                   min(255, base[1] + boost),
-                   min(255, base[2] + boost))
-            c.create_rectangle(max(0, x), 0, min(w, x + strip_w), h,
-                               fill=_rgb_hex(*col), outline="", tags="shimmer")
-
+        c.tag_lower("gradient")      # gradiente al fondo; logo/título/botones encima
         c.tag_raise("content")
-        self.after(50, self._animate_shimmer)
-
-    def _draw_gradient_border(self):
-        c = self._hdr_border
-        c.delete("all")
-        w = c.winfo_width()
-        if w <= 1:
-            return
-        step = 4
-        for x in range(0, w, step):
-            t = x / max(w - 1, 1)
-            r, g, b = _lerp_rgb(_ACCENT_RGB, _ACCENT2_RGB, t)
-            c.create_rectangle(x, 0, x + step, 2, fill=_rgb_hex(r, g, b), outline="")
 
     # ── Tooltip ───────────────────────────────────────────────────────────────
 
@@ -910,8 +832,6 @@ class App(tk.Tk):
             self._status.ok(f"Exportación completada → {out_path.name}  ({size_kb:.1f} KB)")
         else:
             self._status.warn(f"Sesión sin contenido legible → {out_path.name}")
-        if self._open_after.get():
-            self._open_folder(out_path.parent)
 
     def _open_folder(self, path: Path):
         try:
@@ -923,6 +843,15 @@ class App(tk.Tk):
                 subprocess.Popen(["xdg-open", str(path)])
         except Exception:
             pass
+
+    def _open_export_dir(self):
+        """Abre la carpeta de destino actual (botón 'Open Folder' del header)."""
+        d = Path(self._dir_var.get())
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        self._open_folder(d)
 
     # ── Acceso directo ────────────────────────────────────────────────────────
 
