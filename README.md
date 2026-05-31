@@ -56,7 +56,7 @@ pythonw claude_exporter_gui-3.pyw
 
 ## 📸 Screenshot
 
-![Screenshot](screenshot.png)
+> Screenshot coming soon.
 
 ---
 
