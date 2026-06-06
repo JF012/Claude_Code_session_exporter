@@ -24,10 +24,10 @@ class PreviewPanel(tk.Frame):
 
         # Cabecera
         head = tk.Frame(self, bg=S.BG_GLASS)
-        head.pack(fill="x", padx=18, pady=(18, 10))
+        head.pack(fill="x", padx=20, pady=(20, 12))
         tk.Label(head, text="◳", bg=S.BG_GLASS, fg=S.ACCENT_VIOLET,
-                 font=S.font(13)).pack(side="left", padx=(0, 8))
-        tk.Label(head, text="Vista previa de exportación", bg=S.BG_GLASS, fg=S.TEXT,
+                 font=S.font(13)).pack(side="left", padx=(0, 9))
+        tk.Label(head, text="Export preview", bg=S.BG_GLASS, fg=S.TEXT,
                  font=S.font(11, "bold")).pack(side="left")
         tk.Frame(self, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=16)
 
@@ -71,8 +71,8 @@ class PreviewPanel(tk.Frame):
     def show_placeholder(self):
         self._set_readonly(lambda: self._text.insert(
             "1.0",
-            "\n\n   Selecciona una sesión para ver\n"
-            "   aquí su exportación en Markdown.\n",
+            "\n\n   Select a session to preview\n"
+            "   its Markdown export here.\n",
             "muted"))
 
     def show_session(self, session):
@@ -117,8 +117,8 @@ class PreviewPanel(tk.Frame):
 
         if truncated:
             self._text.insert("end", "\n\n", "normal")
-            self._text.insert("end", "… vista previa truncada (el .md completo se "
-                                     "exporta entero)\n", "muted")
+            self._text.insert("end", "… preview truncated (the full .md is "
+                                     "exported in its entirety)\n", "muted")
 
     def _insert_inline(self, text, *, base):
         """Inserta una línea aplicando **negrita** y `code` inline."""

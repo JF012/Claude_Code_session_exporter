@@ -39,7 +39,7 @@ class Session:
     @property
     def display_name(self) -> str:
         """Lo que se muestra como título de la sesión."""
-        return self.title or self.first_user_msg or "(sin título)"
+        return self.title or self.first_user_msg or "(untitled)"
 
     @property
     def chip_colors(self):

@@ -10,6 +10,7 @@ Estos widgets no conocen la lógica de negocio: se les pasan textos y callbacks.
   · Tooltip         — tooltip flotante para cualquier widget
 """
 import tkinter as tk
+import tkinter.font as tkfont
 
 import styles as S
 from core.utils import _hex_to_rgb, lerp_rgb
@@ -25,18 +26,142 @@ except Exception:                      # pragma: no cover
 #  BOTÓN
 # ══════════════════════════════════════════════════════════════════════════════
 
-class RoundedButton(tk.Button):
-    """Botón plano con borde que se ilumina en hover. Cuatro variantes visuales.
+def _button_style(variant):
+    """Paleta de cada variante de botón (reposo / hover / borde / padding)."""
+    if variant == "secondary":
+        return dict(bg=S.BG_GLASS, fg=S.ACCENT_SOFT, border=S.BORDER,
+                    hover_bg=S.CHIP_HOVER, hover_border=S.ACCENT_SOFT,
+                    hover_fg=S.ACCENT_VIOLET, padx=17, pady=10)
+    if variant == "flat":
+        return dict(bg=S.CHIP_BG, fg=S.TEXT_MUTE, border=S.CHIP_BORDER,
+                    hover_bg=S.CHIP_HOVER, hover_border=S.ACCENT_SOFT,
+                    hover_fg=S.ACCENT_SOFT, padx=14, pady=9)
+    if variant == "ghost":
+        return dict(bg=S.BG_PANEL, fg=S.TEXT_DIM, border=S.BG_PANEL,
+                    hover_bg=S.BG_ELEV, hover_border=S.BG_ELEV,
+                    hover_fg=S.TEXT, padx=11, pady=7)
+    return dict(bg=S.ACCENT, fg=S.TEXT, border=S.ACCENT,            # primary
+                hover_bg=S.PRIMARY_HOVER, hover_border=S.PRIMARY_HOVER,
+                hover_fg=S.TEXT, padx=22, pady=11)
+
+
+def _rounded_btn_image(w, h, radius, fill, border, border_w, surface):
+    """Imagen RGB de una píldora redondeada con antialias real (supersample →
+    LANCZOS). Las esquinas quedan pintadas con `surface` para fundirse con el
+    panel de fondo; encima se dibuja el relleno y, si procede, un borde fino."""
+    ss = 4
+    w, h = max(int(w), 1), max(int(h), 1)
+    W, H = w * ss, h * ss
+    img = Image.new("RGB", (W, H), surface)
+    d = ImageDraw.Draw(img)
+    r = max(radius * ss, 1)
+    d.rounded_rectangle([0, 0, W - 1, H - 1], radius=r, fill=fill)
+    bw = int(border_w * ss)
+    if bw > 0 and border is not None and border != fill:
+        d.rounded_rectangle([bw / 2, bw / 2, W - 1 - bw / 2, H - 1 - bw / 2],
+                            radius=max(r - bw / 2, 1), outline=border, width=bw)
+    return ImageTk.PhotoImage(img.resize((w, h), Image.LANCZOS))
+
+
+class _RoundedButtonCanvas(tk.Canvas):
+    """Botón premium con esquinas verdaderamente redondeadas (imagen Pillow).
+
+    El relleno se renderiza supersampleado y se reduce con LANCZOS, así los
+    bordes quedan suaves (tk.Button sólo da rectángulos). El texto se dibuja
+    nativo encima para mantenerlo nítido. Cuatro variantes:
 
     primary   → CTA índigo, texto blanco.
     secondary → vidrio con texto índigo; el borde pasa a índigo en hover.
     flat      → chip discreto (acciones terciarias del sidebar / toolbar).
     ghost     → sin fondo, solo texto que se aclara en hover.
     """
-    def __init__(self, parent, text, command, *, variant="primary", font_size=10, **kw):
+    def __init__(self, parent, text, command, *, variant="primary", font_size=10,
+                 surface=None, **kw):
+        self._variant = variant
+        self._command = command
+        self._text = text
+        self._enabled = True
+        self._hover = False
+        self._style = _button_style(variant)
+        self._font = S.font(font_size, "bold")
+        self._fontobj = tkfont.Font(family=S.FONT_UI, size=font_size, weight="bold")
+        self._surface = surface if surface is not None else S.BG_PANEL
+
+        tw = self._fontobj.measure(text)
+        th = self._fontobj.metrics("linespace")
+        w = tw + 2 * self._style["padx"]
+        h = th + 2 * self._style["pady"]
+        super().__init__(parent, width=w, height=h, bg=self._surface,
+                         highlightthickness=0, bd=0, takefocus=0, cursor="hand2")
+        self._img_id = None
+        self._photo = None
+        self._txt_id = self.create_text(w // 2, h // 2, text=text,
+                                        fill=self._style["fg"], font=self._font)
+        self.bind("<Configure>", lambda e: self._render())
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_click)
+
+    # ── Render ──────────────────────────────────────────────────────────────────
+    def _render(self):
+        w, h = self.winfo_width(), self.winfo_height()
+        if w <= 1 or h <= 1:
+            return
+        s = self._style
+        if not self._enabled:
+            fill, border, fg = S.BG_GLASS, S.BORDER, S.TEXT_DIM
+        elif self._hover:
+            fill, border, fg = s["hover_bg"], s["hover_border"], s["hover_fg"]
+        else:
+            fill, border, fg = s["bg"], s["border"], s["fg"]
+        r = min(h // 2, 13)
+        self._photo = _rounded_btn_image(
+            w, h, r, _hex_to_rgb(fill), _hex_to_rgb(border), 1,
+            _hex_to_rgb(self._surface))
+        if self._img_id is None:
+            self._img_id = self.create_image(0, 0, anchor="nw", image=self._photo)
+        else:
+            self.itemconfig(self._img_id, image=self._photo)
+        self.tag_lower(self._img_id)
+        self.coords(self._txt_id, w // 2, h // 2)
+        self.itemconfig(self._txt_id, fill=fg, text=self._text)
+        self.tag_raise(self._txt_id)
+
+    # ── Interacción ─────────────────────────────────────────────────────────────
+    def _on_enter(self, _):
+        if self._enabled:
+            self._hover = True
+            self._render()
+
+    def _on_leave(self, _):
+        if self._enabled:
+            self._hover = False
+            self._render()
+
+    def _on_click(self, _):
+        if self._enabled and self._command:
+            self._command()
+
+    # ── API (compatible con tk.Button) ──────────────────────────────────────────
+    def set_text(self, text):
+        self._text = text
+        self.config(width=self._fontobj.measure(text) + 2 * self._style["padx"])
+        self._render()
+
+    def set_enabled(self, enabled: bool):
+        self._enabled = bool(enabled)
+        self.config(cursor="hand2" if enabled else "arrow")
+        self._hover = False
+        self._render()
+
+
+class _RoundedButtonFlat(tk.Button):
+    """Fallback sin Pillow: botón plano con borde que se ilumina en hover."""
+    def __init__(self, parent, text, command, *, variant="primary", font_size=10,
+                 surface=None, **kw):
         self._variant  = variant
         self._cmd_real = command
-        s = self._style_for(variant)
+        s = _button_style(variant)
         self._normal = s
         super().__init__(
             parent, text=text, command=command,
@@ -52,24 +177,6 @@ class RoundedButton(tk.Button):
         )
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
-
-    @staticmethod
-    def _style_for(variant):
-        if variant == "secondary":
-            return dict(bg=S.BG_GLASS, fg=S.ACCENT_SOFT, border=S.BORDER,
-                        hover_bg=S.BG_GLASS, hover_border=S.ACCENT_SOFT,
-                        hover_fg=S.ACCENT_VIOLET, padx=16, pady=9)
-        if variant == "flat":
-            return dict(bg=S.CHIP_BG, fg=S.TEXT_MUTE, border=S.CHIP_BORDER,
-                        hover_bg=S.CHIP_HOVER, hover_border=S.ACCENT_SOFT,
-                        hover_fg=S.ACCENT_SOFT, padx=13, pady=8)
-        if variant == "ghost":
-            return dict(bg=S.BG_PANEL, fg=S.TEXT_DIM, border=S.BG_PANEL,
-                        hover_bg=S.BG_PANEL, hover_border=S.BG_PANEL,
-                        hover_fg=S.TEXT, padx=10, pady=6)
-        return dict(bg=S.ACCENT, fg=S.TEXT, border=S.ACCENT,            # primary
-                    hover_bg=S.PRIMARY_HOVER, hover_border=S.PRIMARY_HOVER,
-                    hover_fg=S.TEXT, padx=22, pady=11)
 
     def _on_enter(self, _):
         if str(self["state"]) == "disabled":
@@ -99,6 +206,12 @@ class RoundedButton(tk.Button):
                         highlightbackground=S.BORDER, highlightcolor=S.BORDER)
 
 
+def RoundedButton(*args, **kw):
+    """Crea el botón premium (Pillow) o, si no hay Pillow, el plano de respaldo."""
+    cls = _RoundedButtonCanvas if _HAS_PIL else _RoundedButtonFlat
+    return cls(*args, **kw)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  STATUS BAR
 # ══════════════════════════════════════════════════════════════════════════════
@@ -117,7 +230,7 @@ class StatusBar(tk.Frame):
         self._dot.pack(side="left", padx=(20, 9))
         self._seg = tk.Frame(self, bg=S.BG_DEEP)
         self._seg.pack(side="left", fill="both", expand=True)
-        self.set("Listo")
+        self.set("Ready")
 
     # ── Composición de segmentos ──────────────────────────────────────────────
     def _clear(self):
@@ -148,7 +261,7 @@ class StatusBar(tk.Frame):
         self._clear()
         self._dot.config(fg=S.SUCCESS)
         self._label("✓", S.SUCCESS, S.font(11, "bold"), padx=(0, 9))
-        self._label("Exportado", S.TEXT_SOFT, S.font(9, "bold"))
+        self._label("Exported", S.TEXT_SOFT, S.font(9, "bold"))
         chip = tk.Label(self._seg, text=filename, bg=S.CHIP_BG, fg=S.ACCENT_SOFT,
                         font=S.mono(9, "bold"), padx=9, pady=2,
                         highlightthickness=1, highlightbackground=S.CHIP_BORDER,

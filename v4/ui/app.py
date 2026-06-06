@@ -55,7 +55,7 @@ class App(tk.Tk):
         # ── Estado ────────────────────────────────────────────────────────────
         self._all_sessions = []
         self._projects = []
-        self._current_project = None     # None = "Todas las sesiones"
+        self._current_project = None     # None = "All sessions"
         self._search_query = ""
         self._selected = None
         self._sort_field = "last_ts"
@@ -123,24 +123,24 @@ class App(tk.Tk):
 
     # ── Carga de sesiones (en hilo) ───────────────────────────────────────────
     def _load_sessions(self):
-        self._status.spin("Buscando sesiones de Claude Code…")
+        self._status.spin("Scanning Claude Code sessions…")
         self._toolbar.set_export_enabled(False)
 
         def worker():
             claude_dir = find_claude_dir()
             if not claude_dir:
                 self.after(0, lambda: self._status.error(
-                    "No se encontró ~/.claude — ¿Claude Code instalado?"))
+                    "Couldn't find ~/.claude — is Claude Code installed?"))
                 return
             projects = claude_dir / "projects"
             if not projects.exists():
                 self.after(0, lambda: self._status.error(
-                    f"Carpeta 'projects' no encontrada en {claude_dir}"))
+                    f"'projects' folder not found in {claude_dir}"))
                 return
             try:
                 sessions = gather_all_sessions(projects)
             except Exception as e:
-                self.after(0, lambda: self._status.error(f"Error al leer sesiones: {e}"))
+                self.after(0, lambda: self._status.error(f"Failed to read sessions: {e}"))
                 return
             self.after(0, lambda: self._on_sessions_loaded(sessions))
 
@@ -158,12 +158,11 @@ class App(tk.Tk):
 
         n, pj = len(sessions), len(self._projects)
         if n == 0:
-            self._status.warn("No se encontraron sesiones guardadas")
+            self._status.warn("No saved sessions found")
         else:
-            ses = "sesión" if n == 1 else "sesiones"
-            vig = "vigente" if n == 1 else "vigentes"
-            pjw = "proyecto" if pj == 1 else "proyectos"
-            self._status.ok(f"{n} {ses} {vig} en {pj} {pjw}")
+            ses = "session" if n == 1 else "sessions"
+            pjw = "project" if pj == 1 else "projects"
+            self._status.ok(f"{n} {ses} across {pj} {pjw}")
 
     # ── Filtrado / orden ──────────────────────────────────────────────────────
     def _base_scope(self):
@@ -206,8 +205,8 @@ class App(tk.Tk):
     def _on_project_select(self, project):
         self._current_project = project
         self._refresh_table()
-        name = project.name if project else "todas las sesiones"
-        self._status.info(f"Mostrando {name}")
+        name = project.name if project else "all sessions"
+        self._status.info(f"Showing {name}")
 
     def _on_search(self, query):
         self._search_query = (query or "").lower().strip()
@@ -235,7 +234,7 @@ class App(tk.Tk):
     # ── Acciones: destino ─────────────────────────────────────────────────────
     def _pick_dir(self):
         chosen = filedialog.askdirectory(
-            title="Selecciona la carpeta de destino",
+            title="Select destination folder",
             initialdir=self._toolbar.out_dir)
         if chosen:
             self._toolbar.out_dir = chosen
@@ -252,16 +251,16 @@ class App(tk.Tk):
     def _export_selected(self):
         session = self._selected
         if not session:
-            self._status.warn("Selecciona una sesión primero")
+            self._status.warn("Select a session first")
             return
         out_dir = Path(self._toolbar.out_dir)
         try:
             out_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            self._status.error(f"No se puede crear la carpeta: {e}")
+            self._status.error(f"Couldn't create folder: {e}")
             return
 
-        self._status.spin("Exportando…")
+        self._status.spin("Exporting…")
         self._toolbar.set_export_enabled(False)
 
         def worker():
@@ -270,7 +269,7 @@ class App(tk.Tk):
                 out_path = export_session(session, out_dir)
                 self.after(0, lambda: self._on_exported(out_path, md))
             except Exception as e:
-                self.after(0, lambda: self._status.error(f"Error al exportar: {e}"))
+                self.after(0, lambda: self._status.error(f"Export failed: {e}"))
                 self.after(0, lambda: self._toolbar.set_export_enabled(True))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -281,32 +280,34 @@ class App(tk.Tk):
         if has_readable_turns(content):
             self._status.export_done(out_path.name, size_kb)
         else:
-            self._status.warn(f"Sesión sin contenido legible → {out_path.name}")
+            self._status.warn(f"Session has no readable content → {out_path.name}")
 
     def _export_all(self):
         base = self._base_scope()
         q = self._search_query
         targets = [s for s in base if self._matches(s, q)] if q else list(base)
         if not targets:
-            self._status.warn("No hay sesiones para exportar")
+            self._status.warn("No sessions to export")
             return
 
         out_dir = Path(self._toolbar.out_dir)
-        scope = self._current_project.name if self._current_project else "todas las sesiones"
+        scope = self._current_project.name if self._current_project else "all sessions"
+        count = len(targets)
+        noun = "session" if count == 1 else "sessions"
         if not messagebox.askyesno(
-            "Exportar todo",
-            f"¿Exportar {len(targets)} sesión(es) de «{scope}»\n"
-            f"a:\n{out_dir}?",
+            "Export all",
+            f"Export {count} {noun} from “{scope}”\n"
+            f"to:\n{out_dir}?",
             icon="question"):
             return
 
         try:
             out_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            self._status.error(f"No se puede crear la carpeta: {e}")
+            self._status.error(f"Couldn't create folder: {e}")
             return
 
-        self._status.spin(f"Exportando {len(targets)} sesiones…")
+        self._status.spin(f"Exporting {count} sessions…")
         self._toolbar.set_export_enabled(False)
 
         def worker():
@@ -324,9 +325,9 @@ class App(tk.Tk):
     def _on_export_all_done(self, ok, fail):
         self._toolbar.set_export_enabled(self._selected is not None)
         if fail:
-            self._status.warn(f"Exportadas {ok}, fallaron {fail}")
+            self._status.warn(f"Exported {ok}, {fail} failed")
         else:
-            self._status.ok(f"Exportadas {ok} sesiones a la carpeta de destino")
+            self._status.ok(f"Exported {ok} sessions to the destination folder")
 
     # ── Acceso directo ────────────────────────────────────────────────────────
     def _maybe_offer_shortcut(self):
@@ -334,9 +335,9 @@ class App(tk.Tk):
         if flag.exists():
             return
         if messagebox.askyesno(
-            "Acceso directo",
-            "¿Quieres crear un acceso directo en el Escritorio\n"
-            "para abrir esta aplicación con un solo clic?",
+            "Desktop shortcut",
+            "Would you like to create a Desktop shortcut\n"
+            "to open this app with a single click?",
             icon="question"):
             self._create_shortcut(silent=False)
             try:
@@ -346,21 +347,21 @@ class App(tk.Tk):
 
     def _create_shortcut(self, silent=True):
         if sys.platform != "win32":
-            self._status.warn("Acceso directo solo disponible en Windows")
+            self._status.warn("Shortcuts are only available on Windows")
             return
         entry = get_base_path() / "main.py"
         result = create_desktop_shortcut(entry, self._icon_path)
         if result:
-            self._status.ok("Acceso directo creado en el Escritorio")
+            self._status.ok("Shortcut created on the Desktop")
             if not silent:
                 messagebox.showinfo(
-                    "Acceso directo creado",
-                    f"✔  Acceso directo creado:\n{result}\n\n"
-                    "Desde ahora puedes abrirlo desde el Escritorio.")
+                    "Shortcut created",
+                    f"✔  Shortcut created:\n{result}\n\n"
+                    "You can now open it from the Desktop.")
         else:
-            self._status.error("No se pudo crear el acceso directo")
+            self._status.error("Couldn't create the shortcut")
             if not silent:
                 messagebox.showerror(
                     "Error",
-                    "No se pudo crear el acceso directo.\n"
-                    "Asegúrate de que PowerShell esté disponible.")
+                    "Couldn't create the shortcut.\n"
+                    "Make sure PowerShell is available.")

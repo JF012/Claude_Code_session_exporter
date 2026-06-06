@@ -21,7 +21,7 @@ from ui.living_background import LivingBackground
 COL_DATE = 132
 COL_PROJ = 150
 COL_MSGS = 58
-ROW_H    = 58
+ROW_H    = 62
 MAX_ROWS = 400          # tope defensivo para no renderizar miles de filas
 
 
@@ -95,7 +95,7 @@ class SessionRow(tk.Frame):
         self._scell = scell
         self._title = tk.Label(scell, text="", bg=self._base_bg, fg=S.TEXT,
                                font=S.font(10), anchor="w")
-        self._title.pack(fill="x", anchor="w", pady=(9, 0))
+        self._title.pack(fill="x", anchor="w", pady=(11, 0))
         self._preview = tk.Label(scell, text="", bg=self._base_bg, fg=S.TEXT_DIM,
                                  font=S.font(9), anchor="w")
         self._preview.pack(fill="x", anchor="w")
@@ -178,15 +178,15 @@ class MainTable(tk.Frame):
 
         # ── Buscador grande (flota sobre la zona hero del fondo vivo) ─────────
         self._search = FocusField(self, icon="🔍",
-                                  placeholder="Buscar por sesión, proyecto o fecha…",
+                                  placeholder="Search by session, project or date…",
                                   font=S.font(11))
-        self._search.pack(fill="x", padx=22, pady=(30, 14))
+        self._search.pack(fill="x", padx=24, pady=(32, 16))
         self._search.var.trace_add("write", lambda *_: self._debounce_search())
 
         # ── Título + contador ─────────────────────────────────────────────────
         head = tk.Frame(self, bg=S.BG_DEEP)
-        head.pack(fill="x", padx=24, pady=(0, 8))
-        tk.Label(head, text="Sesiones recientes", bg=S.BG_DEEP, fg=S.TEXT,
+        head.pack(fill="x", padx=24, pady=(2, 10))
+        tk.Label(head, text="Recent sessions", bg=S.BG_DEEP, fg=S.TEXT,
                  font=S.font(12, "bold")).pack(side="left")
         self._count = make_badge(head, "0", fg=S.ACCENT_SOFT, bg=S.BG_ELEV, font_size=9)
         self._count.pack(side="left", padx=10)
@@ -194,13 +194,13 @@ class MainTable(tk.Frame):
         # ── Cabecera de columnas (clic = ordenar) ─────────────────────────────
         hdr = tk.Frame(self, bg=S.BG_DEEP)
         hdr.pack(fill="x", padx=(24, 24))
-        self._col_header(hdr, "ÚLTIMA ACTIVIDAD", width=COL_DATE + 16, anchor="w",
+        self._col_header(hdr, "LAST ACTIVITY", width=COL_DATE + 16, anchor="w",
                          sort_key="last_ts")
-        self._col_header(hdr, "PROYECTO", width=COL_PROJ, anchor="w",
+        self._col_header(hdr, "PROJECT", width=COL_PROJ, anchor="w",
                          sort_key="project")
         self._col_header(hdr, "MSGS", width=COL_MSGS, anchor="e", side="right",
                          sort_key="message_count")
-        self._col_header(hdr, "SESIÓN", width=0, anchor="w", expand=True,
+        self._col_header(hdr, "SESSION", width=0, anchor="w", expand=True,
                          sort_key="display_name")
         tk.Frame(self, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=24, pady=(6, 0))
 
@@ -274,8 +274,8 @@ class MainTable(tk.Frame):
         if not sessions:
             self._empty = tk.Label(
                 self._list.body,
-                text="\n\n( ︶ )\n\nNo hay sesiones que coincidan.\n"
-                     "Prueba con otro término de búsqueda.",
+                text="\n\n( ︶ )\n\nNo sessions match your search.\n"
+                     "Try a different search term.",
                 bg=S.BG_DEEP, fg=S.TEXT_DIM, font=S.font(10), justify="center")
             self._empty.pack(pady=60)
             return
@@ -291,7 +291,7 @@ class MainTable(tk.Frame):
 
         if len(sessions) > MAX_ROWS:
             tk.Label(self._list.body,
-                     text=f"… y {len(sessions) - MAX_ROWS} más (afina la búsqueda)",
+                     text=f"… and {len(sessions) - MAX_ROWS} more (refine your search)",
                      bg=S.BG_DEEP, fg=S.TEXT_DIM, font=S.font(9)).pack(pady=12)
 
         self._list.scroll_to_top()

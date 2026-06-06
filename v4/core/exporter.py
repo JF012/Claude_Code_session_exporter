@@ -55,14 +55,14 @@ def extract_text(content) -> str:
 def session_to_markdown(session: Session) -> str:
     """Documento Markdown completo de una sesión (cabecera + turnos + pie)."""
     lines = [
-        "# Sesión Claude Code",
+        "# Claude Code Session",
         "",
-        f"> **Sesión:** {session.display_name or '—'}  ",
-        f"> **Proyecto:** `{session.project}`  ",
+        f"> **Session:** {session.display_name or '—'}  ",
+        f"> **Project:** `{session.project}`  ",
         f"> **Session ID:** `{session.session_id}`  ",
-        f"> **Inicio:** {format_ts(session.first_ts)}  ",
-        f"> **Última actividad:** {format_ts(session.last_ts)}  ",
-        f"> **Mensajes totales:** {session.message_count}",
+        f"> **Started:** {format_ts(session.first_ts)}  ",
+        f"> **Last activity:** {format_ts(session.last_ts)}  ",
+        f"> **Total messages:** {session.message_count}",
         "",
         "---",
         "",
@@ -77,7 +77,7 @@ def session_to_markdown(session: Session) -> str:
             if not text:
                 continue
             turn += 1
-            lines += [f"## 🧑 Usuario — turno {turn}", "", text, "", "---", ""]
+            lines += [f"## 🧑 User — turn {turn}", "", text, "", "---", ""]
         elif role == "assistant":
             if not text:
                 continue
@@ -86,8 +86,8 @@ def session_to_markdown(session: Session) -> str:
             lines += ["## ⚙️ System", "", f"> {text}", "", "---", ""]
 
     lines.append(
-        f"*Exportado el {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
-        f"con Claude Code Session Exporter*"
+        f"*Exported on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
+        f"with Claude Code Session Exporter*"
     )
     return "\n".join(lines)
 

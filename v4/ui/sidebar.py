@@ -29,7 +29,7 @@ class _NavRow(tk.Frame):
         self._bar.pack(side="left", fill="y")
 
         self._inner = tk.Frame(self, bg=S.BG_PANEL)
-        self._inner.pack(side="left", fill="both", expand=True, padx=(9, 10), pady=7)
+        self._inner.pack(side="left", fill="both", expand=True, padx=(10, 11), pady=9)
 
         self._icon = tk.Label(self._inner, text=icon, bg=S.BG_PANEL, fg=fg_dot,
                               font=S.font(10))
@@ -83,8 +83,8 @@ class Sidebar(tk.Frame):
 
         # Encabezado de sección
         head = tk.Frame(self, bg=S.BG_PANEL)
-        head.pack(fill="x", padx=18, pady=(16, 6))
-        tk.Label(head, text="PROYECTOS", bg=S.BG_PANEL, fg=S.TEXT_DIM,
+        head.pack(fill="x", padx=20, pady=(18, 8))
+        tk.Label(head, text="PROJECTS", bg=S.BG_PANEL, fg=S.TEXT_DIM,
                  font=S.font(8, "bold")).pack(side="left")
         self._proj_count = tk.Label(head, text="", bg=S.BG_PANEL, fg=S.TEXT_FAINT,
                                     font=S.font(8, "bold"))
@@ -97,8 +97,8 @@ class Sidebar(tk.Frame):
         # Pie: recargar
         tk.Frame(self, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=16)
         foot = tk.Frame(self, bg=S.BG_PANEL)
-        foot.pack(fill="x", padx=14, pady=12)
-        RoundedButton(foot, "↻  Actualizar sesiones", self._on_reload,
+        foot.pack(fill="x", padx=14, pady=14)
+        RoundedButton(foot, "↻  Refresh sessions", self._on_reload,
                       variant="flat", font_size=9).pack(fill="x")
 
     # ── Marca (logo + glow) ───────────────────────────────────────────────────
@@ -139,7 +139,7 @@ class Sidebar(tk.Frame):
         self._rows = []
         self._proj_count.config(text=str(len(projects)))
 
-        all_row = _NavRow(self._list.body, icon="◆", label="Todas las sesiones",
+        all_row = _NavRow(self._list.body, icon="◆", label="All sessions",
                           count=total_sessions, fg_dot=S.ACCENT_SOFT,
                           on_click=lambda: self._select(0))
         all_row.pack(fill="x", pady=1)
