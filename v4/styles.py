@@ -18,6 +18,11 @@ BG_PANEL  = "#0d1117"   # paneles glass: sidebar, toolbar, inputs
 BG_GLASS  = "#111827"   # vidrio elevado: panel de preview, tooltips
 BG_ELEV   = "#161b2c"   # chip / badge discreto, botones flat
 
+# ── Tarjeta de contenido (panel elevado que flota sobre el fondo vivo) ───────
+BG_CARD     = "#0a0e1b"   # superficie elevada de la lista (sobre BG_DEEP)
+CARD_HILITE = "#1b2238"   # bisel superior (línea clara que capta luz)
+CARD_BORDER = "#141b2d"   # borde lateral suave de la tarjeta
+
 # ── Filas de la tabla (zebra striping muy sutil + estados) ───────────────────
 ROW_EVEN  = "#070b15"   # fila par   (apenas por encima de BG_DEEP)
 ROW_ODD   = "#0a0f1c"   # fila impar (zebra sutil)
@@ -52,6 +57,18 @@ BORDER_FOCUS= ACCENT      # focus ring de inputs
 CHIP_BG     = "#161b2c"
 CHIP_BORDER = "#2a3149"
 CHIP_HOVER  = "#1e2540"
+
+# ── Campos glass (inputs premium: gradiente, borde suave, sombra y foco) ──────
+# Render con Pillow (rounded rect supersampleado) → esquinas redondeadas reales,
+# bisel superior, borde suave y sombra difusa que tk no puede dar por sí solo.
+FIELD_TOP          = "#1c2540"   # cara superior del vidrio (más clara)
+FIELD_BOT          = "#0f1526"   # base del vidrio (más oscura)
+FIELD_MID          = "#171e35"   # color central → fondo del Entry (sin costura)
+FIELD_BORDER       = "#2c3858"   # borde suave en reposo
+FIELD_BORDER_FOCUS = "#7783d6"   # borde al enfocar (índigo medio)
+FIELD_HILITE       = "#3e4a73"   # brillo superior (bisel de vidrio)
+SHADOW_RGB         = (2, 3, 9)   # color de la sombra difusa de las tarjetas glass
+HERO_SURFACE       = "#172036"   # base bajo el buscador (afinada al glow hero)
 
 # ── Scrollbar glass premium (cápsula AA redondeada, imagen Pillow) ───────────
 # El thumb es una píldora con antialias real y un sheen vertical (más claro

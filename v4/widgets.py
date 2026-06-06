@@ -16,10 +16,88 @@ import styles as S
 from core.utils import _hex_to_rgb, lerp_rgb
 
 try:
-    from PIL import Image, ImageDraw, ImageTk
+    from PIL import Image, ImageDraw, ImageTk, ImageFilter, ImageChops
     _HAS_PIL = True
 except Exception:                      # pragma: no cover
     _HAS_PIL = False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HELPERS DE IMAGEN GLASS (rounded rect con AA, bisel, borde y sombra)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _v_grad(w, h, top, bot):
+    """Imagen RGB de un gradiente vertical top→bot, de tamaño w×h."""
+    h = max(int(h), 1)
+    col = Image.new("RGB", (1, h))
+    ld = col.load()
+    for y in range(h):
+        ld[0, y] = lerp_rgb(top, bot, y / max(h - 1, 1))
+    return col.resize((max(int(w), 1), h))
+
+
+def _v_grad_L(w, h, top, bot):
+    """Igual que _v_grad pero en escala de grises (máscara de caída vertical)."""
+    h = max(int(h), 1)
+    col = Image.new("L", (1, h))
+    ld = col.load()
+    for y in range(h):
+        ld[0, y] = int(top + (bot - top) * (y / max(h - 1, 1)))
+    return col.resize((max(int(w), 1), h))
+
+
+def glass_field_image(w, h, *, radius, surface, focused=False, pad=8, shadow=True):
+    """Tarjeta glass redondeada como PhotoImage (gradiente + bisel + borde + sombra).
+
+    Las esquinas/márgenes se pintan con `surface` para fundirse con lo que haya
+    detrás (panel sólido o, en el buscador, el glow hero). `radius=None` → píldora.
+    `shadow=False` evita la sombra (útil cuando flota sobre el glow, donde una
+    sombra oscura crearía un halo visible)."""
+    ss = 2
+    w, h = max(int(w), 1), max(int(h), 1)
+    W, H = w * ss, h * ss
+    P = pad * ss
+    box = [P, P, W - P, H - P]
+    r = (box[3] - box[1]) // 2 if radius is None else int(radius * ss)
+    r = max(1, min(r, (box[3] - box[1]) // 2))
+
+    base = Image.new("RGB", (W, H), _hex_to_rgb(surface))
+
+    # 1) Sombra difusa (rounded rect oscuro, desplazado hacia abajo y desenfocado)
+    if shadow:
+        sh = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(sh).rounded_rectangle(
+            [box[0], box[1] + 3 * ss, box[2], box[3] + 3 * ss], radius=r, fill=110)
+        sh = sh.filter(ImageFilter.GaussianBlur(5 * ss))
+        base = Image.composite(Image.new("RGB", (W, H), S.SHADOW_RGB), base, sh)
+
+    # 2) Glow índigo exterior al enfocar
+    if focused:
+        gl = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(gl).rounded_rectangle(box, radius=r, fill=255)
+        gl = gl.filter(ImageFilter.GaussianBlur(7 * ss)).point(lambda v: int(v * 0.5))
+        base = Image.composite(Image.new("RGB", (W, H), _hex_to_rgb(S.ACCENT)), base, gl)
+
+    # 3) Relleno de vidrio (gradiente vertical)
+    fill_mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(fill_mask).rounded_rectangle(box, radius=r, fill=255)
+    grad = _v_grad(W, H, _hex_to_rgb(S.FIELD_TOP), _hex_to_rgb(S.FIELD_BOT))
+    base = Image.composite(grad, base, fill_mask)
+
+    # 4) Bisel superior (línea clara interior que decae hacia el centro)
+    hi = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(hi).rounded_rectangle(
+        [box[0] + ss, box[1] + ss, box[2] - ss, box[3] - ss],
+        radius=max(r - ss, 1), outline=255, width=max(ss, 1))
+    hi = ImageChops.multiply(hi, _v_grad_L(W, H, 255, 0)).point(lambda v: int(v * 0.55))
+    base = Image.composite(Image.new("RGB", (W, H), _hex_to_rgb(S.FIELD_HILITE)), base, hi)
+
+    # 5) Borde suave (índigo al enfocar)
+    border = S.FIELD_BORDER_FOCUS if focused else S.FIELD_BORDER
+    ImageDraw.Draw(base).rounded_rectangle(box, radius=r, outline=_hex_to_rgb(border),
+                                           width=max(ss, 1))
+
+    return ImageTk.PhotoImage(base.resize((w, h), Image.LANCZOS))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -47,19 +125,35 @@ def _button_style(variant):
 
 def _rounded_btn_image(w, h, radius, fill, border, border_w, surface):
     """Imagen RGB de una píldora redondeada con antialias real (supersample →
-    LANCZOS). Las esquinas quedan pintadas con `surface` para fundirse con el
-    panel de fondo; encima se dibuja el relleno y, si procede, un borde fino."""
+    LANCZOS). Esquinas pintadas con `surface` (se funden con el panel); encima un
+    relleno con gradiente sutil + bisel superior (volumen) y un borde fino."""
     ss = 4
     w, h = max(int(w), 1), max(int(h), 1)
     W, H = w * ss, h * ss
-    img = Image.new("RGB", (W, H), surface)
-    d = ImageDraw.Draw(img)
     r = max(radius * ss, 1)
-    d.rounded_rectangle([0, 0, W - 1, H - 1], radius=r, fill=fill)
+    img = Image.new("RGB", (W, H), surface)
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, W - 1, H - 1], radius=r, fill=255)
+
+    # Relleno con gradiente sutil (más claro arriba → base abajo) → volumen
+    top = tuple(min(255, c + 15) for c in fill)
+    img = Image.composite(_v_grad(W, H, top, fill), img, mask)
+
+    # Bisel superior: línea clara interior que decae hacia el centro
+    hi = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(hi).rounded_rectangle([ss, ss, W - 1 - ss, H - 1 - ss],
+                                         radius=max(r - ss, 1), outline=255,
+                                         width=max(ss, 1))
+    hi = ImageChops.multiply(hi, _v_grad_L(W, H, 255, 0)).point(lambda v: int(v * 0.45))
+    hilite = tuple(min(255, c + 55) for c in fill)
+    img = Image.composite(Image.new("RGB", (W, H), hilite), img, hi)
+
+    # Borde fino
     bw = int(border_w * ss)
     if bw > 0 and border is not None and border != fill:
-        d.rounded_rectangle([bw / 2, bw / 2, W - 1 - bw / 2, H - 1 - bw / 2],
-                            radius=max(r - bw / 2, 1), outline=border, width=bw)
+        ImageDraw.Draw(img).rounded_rectangle(
+            [bw / 2, bw / 2, W - 1 - bw / 2, H - 1 - bw / 2],
+            radius=max(r - bw / 2, 1), outline=border, width=bw)
     return ImageTk.PhotoImage(img.resize((w, h), Image.LANCZOS))
 
 
@@ -275,14 +369,132 @@ class StatusBar(tk.Frame):
 #  CAMPO DE ENTRADA CON FOCUS RING
 # ══════════════════════════════════════════════════════════════════════════════
 
-class FocusField(tk.Frame):
-    """Entry dentro de un marco con borde sutil que se ilumina al enfocar.
+class _FocusFieldGlass(tk.Canvas):
+    """Campo glass premium: tarjeta Pillow redondeada (gradiente + bisel + borde +
+    sombra) con un Entry nativo encima. Soporta icono y placeholder. Al enfocar,
+    el borde se vuelve índigo y aparece un glow suave.
 
-    Soporta un icono a la izquierda y un placeholder que desaparece al escribir.
-    Accede al texto con `.value` / `.value = ...` o a la StringVar con `.var`.
+    Las esquinas se funden con `surface` (panel sólido, o el glow hero para el
+    buscador). Acceso al texto con `.value` / `.var`; el Entry vive en `.entry`.
     """
     def __init__(self, parent, *, textvariable=None, font=None, icon=None,
-                 placeholder=None, mono=False):
+                 placeholder=None, mono=False, surface=S.BG_PANEL,
+                 radius=None, height=None, shadow=True):
+        self.var = textvariable or tk.StringVar()
+        self._font = font or (S.mono(9) if mono else S.font(10))
+        self._fontobj = tkfont.Font(font=self._font)
+        self._placeholder = placeholder
+        self._showing_ph = False
+        self._surface = surface
+        self._radius = radius
+        self._icon = icon
+        self._shadow = shadow
+        self._focused = False
+        self._pad = 8                       # margen exterior (sombra / glow)
+        self._last_wh = (0, 0)
+
+        ls = self._fontobj.metrics("linespace")
+        inner = 9 if not mono else 7
+        h = height or (ls + 2 * inner + 2 * self._pad)
+        super().__init__(parent, height=h, bg=surface, highlightthickness=0,
+                         bd=0, takefocus=0)
+
+        self._img_id = None
+        self._photo = None
+        self._icon_id = None
+        self.entry = tk.Entry(self, textvariable=self.var, font=self._font,
+                              bg=S.FIELD_MID, fg=S.TEXT, insertbackground=S.ACCENT,
+                              relief="flat", bd=0, highlightthickness=0)
+        self._entry_win = self.create_window(0, 0, anchor="w", window=self.entry)
+
+        self.entry.bind("<FocusIn>", self._on_focus_in, add="+")
+        self.entry.bind("<FocusOut>", self._on_focus_out, add="+")
+        self.bind("<Configure>", lambda e: self._redraw())
+
+        if placeholder:
+            self._apply_placeholder()
+
+    # ── Pintado ─────────────────────────────────────────────────────────────────
+    def _redraw(self):
+        w, h = self.winfo_width(), self.winfo_height()
+        if w <= 1 or h <= 1:
+            return
+        if (w, h) != self._last_wh or self._dirty():
+            self._last_wh = (w, h)
+            self._photo = glass_field_image(
+                w, h, radius=self._radius, surface=self._surface,
+                focused=self._focused, pad=self._pad, shadow=self._shadow)
+            if self._img_id is None:
+                self._img_id = self.create_image(0, 0, anchor="nw", image=self._photo)
+            else:
+                self.itemconfig(self._img_id, image=self._photo)
+            self.tag_lower(self._img_id)
+        # Posicionar icono + entry sobre la tarjeta
+        cy = h // 2
+        left = self._pad + 16
+        if self._icon is not None:
+            if self._icon_id is None:
+                self._icon_id = self.create_text(left, cy, text=self._icon,
+                                                 fill=S.TEXT_DIM, font=S.font(12),
+                                                 anchor="w")
+            else:
+                self.coords(self._icon_id, left, cy)
+            left += 24
+        right = w - self._pad - 16
+        self.coords(self._entry_win, left, cy)
+        self.itemconfig(self._entry_win, width=max(right - left, 1),
+                        height=self._fontobj.metrics("linespace") + 4)
+
+    def _dirty(self):
+        """Marca para forzar re-render cuando cambia el estado de foco."""
+        d = getattr(self, "_focus_dirty", False)
+        self._focus_dirty = False
+        return d
+
+    def _rerender(self):
+        self._focus_dirty = True
+        self._redraw()
+
+    # ── Focus ring ────────────────────────────────────────────────────────────
+    def _on_focus_in(self, _):
+        self._focused = True
+        self._rerender()
+        if self._showing_ph:
+            self._showing_ph = False
+            self.var.set("")
+            self.entry.config(fg=S.TEXT)
+
+    def _on_focus_out(self, _):
+        self._focused = False
+        self._rerender()
+        if self._placeholder and not self.var.get().strip():
+            self._apply_placeholder()
+
+    def _apply_placeholder(self):
+        self._showing_ph = True
+        self.entry.config(fg=S.TEXT_FAINT)
+        self.var.set(self._placeholder)
+
+    # ── Valor ─────────────────────────────────────────────────────────────────
+    @property
+    def value(self) -> str:
+        return "" if self._showing_ph else self.var.get()
+
+    @value.setter
+    def value(self, text: str):
+        self._showing_ph = False
+        self.entry.config(fg=S.TEXT)
+        self.var.set(text)
+
+    def is_placeholder(self) -> bool:
+        return self._showing_ph
+
+
+class _FocusFieldFlat(tk.Frame):
+    """Fallback sin Pillow: Entry en un marco con borde que se ilumina al enfocar."""
+    def __init__(self, parent, *, textvariable=None, font=None, icon=None,
+                 placeholder=None, mono=False, surface=S.BG_PANEL,
+                 radius=None, height=None):
         super().__init__(parent, bg=S.BG_PANEL, bd=0, highlightthickness=1,
                          highlightbackground=S.BORDER, highlightcolor=S.BORDER)
         self.var = textvariable or tk.StringVar()
@@ -306,7 +518,6 @@ class FocusField(tk.Frame):
         if placeholder:
             self._apply_placeholder()
 
-    # ── Focus ring ────────────────────────────────────────────────────────────
     def _on_focus_in(self, _):
         self.config(highlightbackground=S.BORDER_FOCUS, highlightcolor=S.BORDER_FOCUS)
         if self._showing_ph:
@@ -324,7 +535,6 @@ class FocusField(tk.Frame):
         self.entry.config(fg=S.TEXT_FAINT)
         self.var.set(self._placeholder)
 
-    # ── Valor ─────────────────────────────────────────────────────────────────
     @property
     def value(self) -> str:
         return "" if self._showing_ph else self.var.get()
@@ -337,6 +547,12 @@ class FocusField(tk.Frame):
 
     def is_placeholder(self) -> bool:
         return self._showing_ph
+
+
+def FocusField(*args, **kw):
+    """Crea el campo glass (Pillow) o el plano de respaldo si no hay Pillow."""
+    cls = _FocusFieldGlass if _HAS_PIL else _FocusFieldFlat
+    return cls(*args, **kw)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

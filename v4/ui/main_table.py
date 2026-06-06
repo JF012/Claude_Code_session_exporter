@@ -176,24 +176,32 @@ class MainTable(tk.Frame):
         self._bg.place(x=0, y=0, relwidth=1, relheight=1)
         tk.Misc.lower(self._bg)
 
-        # ── Buscador grande (flota sobre la zona hero del fondo vivo) ─────────
+        # ── Buscador glass (flota sobre la zona hero del fondo vivo) ──────────
         self._search = FocusField(self, icon="🔍",
                                   placeholder="Search by session, project or date…",
-                                  font=S.font(11))
-        self._search.pack(fill="x", padx=24, pady=(32, 16))
+                                  font=S.font(11), surface=S.HERO_SURFACE, radius=16,
+                                  shadow=False)
+        self._search.pack(fill="x", padx=18, pady=(30, 14))
         self._search.var.trace_add("write", lambda *_: self._debounce_search())
 
-        # ── Título + contador ─────────────────────────────────────────────────
-        head = tk.Frame(self, bg=S.BG_DEEP)
-        head.pack(fill="x", padx=24, pady=(2, 10))
-        tk.Label(head, text="Recent sessions", bg=S.BG_DEEP, fg=S.TEXT,
+        # ── Tarjeta de contenido (panel elevado que flota sobre el fondo vivo) ─
+        # Unifica título + columnas + lista en una sola superficie elevada con un
+        # bisel superior, en vez de varias barras oscuras sueltas sobre el glow.
+        card = tk.Frame(self, bg=S.BG_CARD)
+        card.pack(fill="both", expand=True, padx=14, pady=(2, 12))
+        tk.Frame(card, bg=S.CARD_HILITE, height=1).pack(fill="x")   # bisel superior
+
+        # Título + contador
+        head = tk.Frame(card, bg=S.BG_CARD)
+        head.pack(fill="x", padx=20, pady=(15, 10))
+        tk.Label(head, text="Recent sessions", bg=S.BG_CARD, fg=S.TEXT,
                  font=S.font(12, "bold")).pack(side="left")
         self._count = make_badge(head, "0", fg=S.ACCENT_SOFT, bg=S.BG_ELEV, font_size=9)
         self._count.pack(side="left", padx=10)
 
-        # ── Cabecera de columnas (clic = ordenar) ─────────────────────────────
-        hdr = tk.Frame(self, bg=S.BG_DEEP)
-        hdr.pack(fill="x", padx=(24, 24))
+        # Cabecera de columnas (clic = ordenar)
+        hdr = tk.Frame(card, bg=S.BG_CARD)
+        hdr.pack(fill="x", padx=(20, 20))
         self._col_header(hdr, "LAST ACTIVITY", width=COL_DATE + 16, anchor="w",
                          sort_key="last_ts")
         self._col_header(hdr, "PROJECT", width=COL_PROJ, anchor="w",
@@ -202,24 +210,24 @@ class MainTable(tk.Frame):
                          sort_key="message_count")
         self._col_header(hdr, "SESSION", width=0, anchor="w", expand=True,
                          sort_key="display_name")
-        tk.Frame(self, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=24, pady=(6, 0))
+        tk.Frame(card, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=20, pady=(6, 0))
 
-        # ── Lista ─────────────────────────────────────────────────────────────
-        self._list = ScrollableFrame(self, bg=S.BG_DEEP)
-        self._list.pack(fill="both", expand=True, padx=(16, 8), pady=(2, 12))
+        # Lista
+        self._list = ScrollableFrame(card, bg=S.BG_CARD)
+        self._list.pack(fill="both", expand=True, padx=(14, 8), pady=(2, 10))
         self._list.canvas.bind("<Configure>", self._on_canvas_resize, add="+")
 
         # Estado vacío
-        self._empty = tk.Label(self._list.body, text="", bg=S.BG_DEEP, fg=S.TEXT_DIM,
+        self._empty = tk.Label(self._list.body, text="", bg=S.BG_CARD, fg=S.TEXT_DIM,
                                font=S.font(10), justify="center")
 
     def _col_header(self, parent, text, *, width, anchor, expand=False,
                     side="left", sort_key=None):
-        cell = tk.Frame(parent, bg=S.BG_DEEP, width=width)
+        cell = tk.Frame(parent, bg=S.BG_CARD, width=width)
         cell.pack(side=side, fill="x" if expand else "y", expand=expand)
         if width:
             cell.pack_propagate(False)
-        lbl = tk.Label(cell, text=text, bg=S.BG_DEEP, fg=S.TEXT_FAINT,
+        lbl = tk.Label(cell, text=text, bg=S.BG_CARD, fg=S.TEXT_FAINT,
                        font=S.font(8, "bold"), anchor=anchor)
         lbl.pack(side="left", fill="x", expand=True, pady=(0, 6))
         if sort_key and self._on_sort:
@@ -276,7 +284,7 @@ class MainTable(tk.Frame):
                 self._list.body,
                 text="\n\n( ︶ )\n\nNo sessions match your search.\n"
                      "Try a different search term.",
-                bg=S.BG_DEEP, fg=S.TEXT_DIM, font=S.font(10), justify="center")
+                bg=S.BG_CARD, fg=S.TEXT_DIM, font=S.font(10), justify="center")
             self._empty.pack(pady=60)
             return
 
@@ -292,7 +300,7 @@ class MainTable(tk.Frame):
         if len(sessions) > MAX_ROWS:
             tk.Label(self._list.body,
                      text=f"… and {len(sessions) - MAX_ROWS} more (refine your search)",
-                     bg=S.BG_DEEP, fg=S.TEXT_DIM, font=S.font(9)).pack(pady=12)
+                     bg=S.BG_CARD, fg=S.TEXT_DIM, font=S.font(9)).pack(pady=12)
 
         self._list.scroll_to_top()
         # Truncar al ancho actual del canvas
