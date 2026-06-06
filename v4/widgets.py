@@ -12,6 +12,13 @@ Estos widgets no conocen la lógica de negocio: se les pasan textos y callbacks.
 import tkinter as tk
 
 import styles as S
+from core.utils import _hex_to_rgb, lerp_rgb
+
+try:
+    from PIL import Image, ImageDraw, ImageTk
+    _HAS_PIL = True
+except Exception:                      # pragma: no cover
+    _HAS_PIL = False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -228,8 +235,14 @@ class GlassScrollbar(tk.Canvas):
 
     Implementa el protocolo de tk.Scrollbar (`set` como yscrollcommand + un
     `command` tipo yview), así que es un reemplazo directo para Canvas o Text.
-    Sin flechas ni pista visible: sólo una cápsula redondeada que se ilumina en
-    hover y se oculta cuando todo el contenido cabe en pantalla.
+    Sin flechas: una píldora redondeada con antialias real (imagen Pillow), un
+    riel sutil y un sheen vertical que le da profundidad. Se ilumina en hover y se
+    oculta cuando todo el contenido cabe en pantalla.
+
+    El render con imagen elimina las "rayas duras" del trazado vectorial de
+    tkinter (que no tiene antialias): la cápsula se dibuja supersampleada y se
+    reduce con LANCZOS, así los bordes y las tapas quedan suaves y simétricos. Si
+    Pillow no está disponible, cae a un trazado vectorial equivalente.
     """
     def __init__(self, parent, command, *, bg=S.BG_DEEP, width=S.SCROLL_W):
         super().__init__(parent, width=width, bg=bg, highlightthickness=0, bd=0,
@@ -237,9 +250,12 @@ class GlassScrollbar(tk.Canvas):
         self._command = command            # callable estilo yview
         self._first, self._last = 0.0, 1.0
         self._pad = 2                       # margen del thumb respecto al borde
-        self._min_thumb = 32                # alto mínimo legible del thumb (px)
+        self._track_pad = 4                 # margen del riel (más estrecho que el thumb)
+        self._min_thumb = 34                # alto mínimo legible del thumb (px)
         self._hover = False
         self._drag_dy = None                # offset del ratón dentro del thumb
+        self._img_id = None                 # item de imagen en el canvas
+        self._photo = None                  # ref viva de la PhotoImage (anti-GC)
         self.bind("<Configure>", lambda e: self._redraw())
         self.bind("<Button-1>", self._on_press)
         self.bind("<B1-Motion>", self._on_motion)
@@ -252,7 +268,7 @@ class GlassScrollbar(tk.Canvas):
         self._first, self._last = float(first), float(last)
         self._redraw()
 
-    # ── Geometría del thumb ───────────────────────────────────────────────────
+    # ── Geometría del thumb (coordenadas de canvas) ───────────────────────────
     def _thumb_bounds(self):
         h = self.winfo_height()
         if h <= 1 or (self._first <= 0.0 and self._last >= 1.0):
@@ -265,39 +281,89 @@ class GlassScrollbar(tk.Canvas):
             if bot > h:   top, bot = h - self._min_thumb, h
         return top, bot
 
+    # ── Pintado ───────────────────────────────────────────────────────────────
     def _redraw(self):
+        if not _HAS_PIL:
+            self._redraw_vector()
+            return
+        photo = self._render_strip()
+        if photo is None:                   # contenido completo → barra oculta
+            if self._img_id is not None:
+                self.delete(self._img_id)
+                self._img_id = None
+            self._photo = None
+            return
+        self._photo = photo
+        if self._img_id is None:
+            self._img_id = self.create_image(0, 0, anchor="nw", image=photo)
+        else:
+            self.itemconfig(self._img_id, image=photo)
+
+    def _render_strip(self):
+        """Compone riel + thumb en una sola imagen RGBA (supersample → LANCZOS).
+        Devuelve una PhotoImage, o None si no debe verse barra."""
+        w, h = self.winfo_width(), self.winfo_height()
+        b = self._thumb_bounds()
+        if w <= 1 or h <= 1 or b is None:
+            return None
+        ss = 4
+        W, H = w * ss, h * ss
+        img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        # Riel: píldora estrecha de altura completa, con alpha sutil (sin línea dura).
+        tp = self._track_pad * ss
+        tr = _hex_to_rgb(S.SCROLL_TRACK)
+        draw.rounded_rectangle([tp, tp, W - tp, H - tp], radius=(W - 2 * tp) / 2,
+                               fill=(tr[0], tr[1], tr[2], S.SCROLL_TRACK_ALPHA))
+
+        # Thumb: píldora con sheen vertical (más claro arriba → base abajo).
+        top, bot = b
+        pad = self._pad * ss
+        x0, x1 = pad, W - pad
+        y0 = int(top * ss) + pad
+        y1 = int(bot * ss) - pad
+        tw = int(x1 - x0)
+        if y1 - y0 < tw:                    # nunca más corto que su diámetro
+            y1 = y0 + tw
+        th = y1 - y0
+        hovering = self._hover or self._drag_dy is not None
+        c_top = _hex_to_rgb(S.SCROLL_THUMB_TOP_H if hovering else S.SCROLL_THUMB_TOP)
+        c_bot = _hex_to_rgb(S.SCROLL_THUMB_BOT_H if hovering else S.SCROLL_THUMB_BOT)
+        grad = self._v_gradient(tw, th, c_top, c_bot)
+        mask = Image.new("L", (tw, th), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, tw - 1, th - 1],
+                                               radius=tw / 2, fill=255)
+        img.paste(grad, (int(x0), int(y0)), mask)
+
+        return ImageTk.PhotoImage(img.resize((w, h), Image.LANCZOS))
+
+    @staticmethod
+    def _v_gradient(w, h, top, bot):
+        """Columna de gradiente vertical top→bot, estirada a w×h."""
+        h = max(h, 1)
+        col = Image.new("RGB", (1, h))
+        ld = col.load()
+        for y in range(h):
+            ld[0, y] = lerp_rgb(top, bot, y / max(h - 1, 1))
+        return col.resize((max(w, 1), h))
+
+    # ── Fallback vectorial (sin Pillow) ───────────────────────────────────────
+    def _redraw_vector(self):
         self.delete("all")
         if self._thumb_bounds() is None:
-            return                          # contenido completo → barra oculta
-        self._paint_track()
-        self._paint_thumb()
-
-    def _paint_track(self):
-        """Riel fino y tenue de altura completa: ancla el thumb (nunca parece
-        cortado) sin robar protagonismo — más estrecho que el thumb."""
-        self.delete("track")
+            return
         h, w = self.winfo_height(), self.winfo_width()
-        if h <= 1:
-            return
-        self._capsule(self._pad + 2, self._pad, w - self._pad - 2, h - self._pad,
-                      S.SCROLL_TRACK, tag="track")
-
-    def _paint_thumb(self):
-        """Thumb glass de dos tonos: un rim oscuro (cuerpo) con un núcleo más
-        claro inset encima → profundidad en vez de una cápsula plana."""
-        self.delete("thumb")
-        b = self._thumb_bounds()
-        if not b:
-            return
-        top, bot = b
-        w = self.winfo_width()
+        self._capsule(self._track_pad, self._pad, w - self._track_pad,
+                      h - self._pad, S.SCROLL_TRACK, tag="track")
+        top, bot = self._thumb_bounds()
         hovering = self._hover or self._drag_dy is not None
         rim  = S.SCROLL_THUMB if hovering else S.SCROLL_THUMB_BASE
         core = S.SCROLL_THUMB_HOVER if hovering else S.SCROLL_THUMB
         x0, x1 = self._pad, w - self._pad
         y0, y1 = top + self._pad, bot - self._pad
         self._capsule(x0, y0, x1, y1, rim, tag="thumb")
-        ci, cj = 2, 3                        # inset del núcleo (horizontal / vertical)
+        ci, cj = 2, 3
         if (x1 - x0) > 2 * ci and (y1 - y0) > 2 * cj:
             self._capsule(x0 + ci, y0 + cj, x1 - ci, y1 - cj, core, tag="thumb")
 
@@ -305,7 +371,7 @@ class GlassScrollbar(tk.Canvas):
         """Rectángulo con extremos semicirculares (pill vertical)."""
         if y1 - y0 < 2:
             y1 = y0 + 2
-        d = x1 - x0                          # diámetro de las tapas
+        d = x1 - x0
         self.create_rectangle(x0, y0 + d / 2, x1, y1 - d / 2,
                               fill=color, outline="", tags=tag)
         self.create_oval(x0, y0, x1, y0 + d, fill=color, outline="", tags=tag)
@@ -314,7 +380,7 @@ class GlassScrollbar(tk.Canvas):
     # ── Interacción ───────────────────────────────────────────────────────────
     def _set_hover(self, on):
         self._hover = on
-        self._paint_thumb()
+        self._redraw()
 
     def _on_press(self, e):
         b = self._thumb_bounds()
@@ -323,7 +389,7 @@ class GlassScrollbar(tk.Canvas):
         top, bot = b
         if top <= e.y <= bot:
             self._drag_dy = e.y - top        # empezar arrastre
-            self._paint_thumb()
+            self._redraw()
         else:
             self._command("scroll", 1 if e.y > bot else -1, "pages")
 
@@ -337,7 +403,7 @@ class GlassScrollbar(tk.Canvas):
 
     def _end_drag(self):
         self._drag_dy = None
-        self._paint_thumb()
+        self._redraw()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

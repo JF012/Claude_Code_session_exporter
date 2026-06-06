@@ -53,14 +53,21 @@ CHIP_BG     = "#161b2c"
 CHIP_BORDER = "#2a3149"
 CHIP_HOVER  = "#1e2540"
 
-# ── Scrollbar glass premium (cápsula con profundidad, custom canvas) ─────────
-# El thumb es un vidrio de dos tonos: un rim oscuro (cuerpo) + un núcleo más
-# claro, para que tenga profundidad en vez de verse plano/uniforme.
-SCROLL_TRACK       = "#0f1626"   # riel: vidrio muy sutil (oscuro)
-SCROLL_THUMB_BASE  = "#2b3556"   # rim / cuerpo del thumb (vidrio índigo oscuro)
-SCROLL_THUMB       = "#47548a"   # núcleo del thumb en reposo (buen contraste)
-SCROLL_THUMB_HOVER = "#6675b8"   # núcleo en hover / arrastre (claramente más vivo)
-SCROLL_W           = 15          # ancho reservado de la barra (px)
+# ── Scrollbar glass premium (cápsula AA redondeada, imagen Pillow) ───────────
+# El thumb es una píldora con antialias real y un sheen vertical (más claro
+# arriba → base abajo) que le da profundidad de vidrio, sin rayas ni costuras.
+# El riel se pinta con alpha sutil para anclar el thumb sin un borde duro.
+SCROLL_TRACK       = "#0e1524"   # riel: vidrio muy sutil
+SCROLL_TRACK_ALPHA = 120         # opacidad del riel (0..255) → sutil, sin línea dura
+SCROLL_THUMB_TOP   = "#5d6bab"   # sheen superior del thumb (reposo)
+SCROLL_THUMB_BOT   = "#39456f"   # base del thumb (reposo)
+SCROLL_THUMB_TOP_H = "#8a98e0"   # sheen superior (hover / arrastre)
+SCROLL_THUMB_BOT_H = "#5562a8"   # base (hover / arrastre)
+SCROLL_W           = 14          # ancho reservado de la barra (px)
+# Fallback vectorial (sólo si Pillow no está disponible)
+SCROLL_THUMB_BASE  = "#2b3556"   # rim / cuerpo del thumb
+SCROLL_THUMB       = "#47548a"   # núcleo del thumb en reposo
+SCROLL_THUMB_HOVER = "#6675b8"   # núcleo en hover / arrastre
 
 # ── Fondo vivo (gradiente índigo + orbes de glow) ────────────────────────────
 # Glass fuerte: gradiente hero marcado y orbes de alta opacidad. Paleta estricta

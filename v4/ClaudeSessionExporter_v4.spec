@@ -11,7 +11,9 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # numpy se cuela vía el puente opcional de Pillow, pero NO lo usamos en runtime
+    # (sólo Image/ImageDraw/ImageFilter/ImageTk). Excluirlo evita ~18 MB de bloat.
+    excludes=['numpy'],
     noarchive=False,
     optimize=0,
 )

@@ -4,8 +4,9 @@ Rediseño completo de la app: **interfaz glassmorphism split-view** (sidebar de
 proyectos · tabla central · vista previa en vivo) y **arquitectura modular** con
 separación estricta entre lógica de negocio (`core/`) y UI (`ui/`).
 
-Sigue siendo **tkinter + ttk puro, sin dependencias externas** — se ejecuta con el
-Python estándar y se empaqueta como `.exe` autónomo.
+UI en **tkinter + ttk**, con **Pillow** para el fondo vivo y el scrollbar (blur y
+antialias reales que tkinter no puede dar por sí solo); si Pillow falta, ambos caen
+a un fallback y la app sigue funcionando. Se empaqueta como `.exe` autónomo.
 
 ---
 
@@ -18,8 +19,9 @@ pythonw main.py      # Windows, sin ventana de consola
 python main.py
 ```
 
-Requisitos: **Python 3.8+** (probado en 3.14). `tkinter` viene incluido en el
-instalador estándar de Python. Sin `pip install` de nada.
+Requisitos: **Python 3.8+** (probado en 3.14) y **Pillow** (`pip install Pillow`)
+para el fondo borroso y el scrollbar suave —sin ella la app arranca igual, con un
+fondo estático—. `tkinter` viene incluido en el instalador estándar de Python.
 
 ---
 
