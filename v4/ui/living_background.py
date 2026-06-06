@@ -1,13 +1,20 @@
 """
 ui/living_background.py — Fondo "vivo" del área principal.
 
-Un lienzo que respira: un gradiente índigo muy sutil sobre el que derivan
-varios orbes de glow con movimiento lento (tipo lissajous). Todo es geometría
-de tkinter (sin imágenes ni dependencias externas).
+Un lienzo glassmorphism que respira: un gradiente índigo sobre el que derivan
+varios orbes de glow suave (deriva tipo lissajous). Geometría pura de tkinter,
+sin imágenes ni dependencias externas.
 
-Se coloca DETRÁS del contenido del área central y sólo asoma por los márgenes
-—nunca sobre la tabla ni los paneles—, así que aporta vida sin restar
-legibilidad. La paleta vive en `styles.py` (LIVE_GRAD_* / LIVE_ORBS).
+Rendimiento (clave para ir fluido a ~60 fps):
+  Cada orbe se construye UNA sola vez como una pila de óvalos concéntricos con
+  color FIJO (el glow se premezcla contra el fondo en su ancla). La animación NO
+  recolorea ni reposiciona óvalo por óvalo: traslada el orbe entero con
+  `Canvas.move(tag, dx, dy)` —una sola llamada Tcl por orbe y frame—. Así el
+  coste por frame es ínfimo y se puede subir el nº de capas (blur más suave) y la
+  opacidad sin penalizar los fps. La paleta vive en `styles.py`.
+
+Se coloca DETRÁS del contenido del área central y asoma por la banda hero (sobre
+el buscador) y los márgenes, aportando vida sin restar legibilidad a la tabla.
 """
 import math
 import tkinter as tk
@@ -15,26 +22,35 @@ import tkinter as tk
 import styles as S
 from core.utils import mix
 
-ORB_LAYERS  = 18     # óvalos concéntricos por orbe (cuantos más, más suave el glow)
-FPS_MS      = 33     # ~30 fps; el movimiento ya es lento de por sí
-RECOLOR_EVERY = 6    # recolorea cada N frames (el color cambia despacio)
+ORB_LAYERS = 30      # óvalos concéntricos por orbe → glow muy suave (coste sólo al construir)
+FPS_MS     = 16      # ~60 fps
+GRAD_STEP  = 4       # alto (px) de cada banda del gradiente
+GRAD_OVER  = 28      # sobredibujo vertical del gradiente para desplazarlo sin huecos
+GRAD_AMP   = 16      # amplitud de la deriva vertical del gradiente (px)
+GRAD_SPD   = 0.16    # velocidad de esa deriva (rad/s) → ~39 s por ciclo
 
 
 class _Orb:
-    """Un orbe de glow: ancla relativa + deriva sinusoidal en X e Y."""
-    def __init__(self, color, peak, ax, ay, rx, ry, sx, sy, px, py, radius):
-        self.color = color          # color base del glow
+    """Orbe de glow elíptico: ancla relativa + deriva sinusoidal lenta en X/Y.
+
+    Es elíptico (rw≠rh) para poder cubrir la banda hero con una sola elipse
+    ancha y evitar el "mordisco" oscuro que produciría solapar varios círculos
+    opacos.
+    """
+    def __init__(self, color, peak, ax, ay, dx, dy, sx, sy, px, py, rw, rh):
+        self.color = color          # color del glow (paleta índigo/violeta)
         self.peak = peak            # intensidad pico (0..1) hacia el centro
         self.ax, self.ay = ax, ay   # ancla relativa al tamaño (0..1)
-        self.rx, self.ry = rx, ry   # amplitud de deriva (px)
+        self.dx, self.dy = dx, dy   # amplitud de deriva (px)
         self.sx, self.sy = sx, sy   # velocidad angular (rad/s)
         self.px, self.py = px, py   # desfase inicial
-        self.radius = radius        # radio del glow (px)
-        self.ids = []               # óvalos, de fuera (i=0) hacia dentro
+        self.rw, self.rh = rw, rh   # radios del glow (px)
+        self.tag = None             # tag Tcl propio → se mueve en bloque
+        self.cx = self.cy = 0.0     # centro actual (px); se trackea para mover por delta
 
-    def center(self, t, w, h):
-        cx = self.ax * w + self.rx * math.sin(self.sx * t + self.px)
-        cy = self.ay * h + self.ry * math.sin(self.sy * t + self.py)
+    def target(self, t, w, h):
+        cx = self.ax * w + self.dx * math.sin(self.sx * t + self.px)
+        cy = self.ay * h + self.dy * math.sin(self.sy * t + self.py)
         return cx, cy
 
 
@@ -47,77 +63,86 @@ class LivingBackground(tk.Canvas):
         # interna del widget. Guardamos el tamaño en _cw / _ch.
         self._cw = self._ch = 0
         self._t = 0.0
-        self._frame = 0
+        self._grad_dy = 0.0          # desplazamiento vertical actual del gradiente
         self._running = False
         self._after = None
         self._orbs = self._make_orbs()
         self.bind("<Configure>", self._on_configure)
         self.bind("<Destroy>", lambda e: self._stop())
 
-    # ── Orbes (parámetros fijos → estable entre ejecuciones) ──────────────────
+    # ── Orbes (geometría fija → estable entre ejecuciones) ────────────────────
     def _make_orbs(self):
-        # Anclas sesgadas hacia bordes y zona superior: ahí es donde el canvas
-        # asoma de verdad (banda hero sobre el buscador + márgenes), porque el
-        # centro queda tapado por la tabla opaca. Radios grandes → el glow
-        # florece dentro de los márgenes visibles.
-        # ax,   ay,   rx, ry, sx,    sy,    px,  py,  radio
+        # Anclas sesgadas a la banda hero (sobre el buscador) y a los márgenes:
+        # ahí es donde el canvas asoma de verdad (el centro lo tapa la tabla).
+        # Elipses anchas para cubrir esas franjas con un campo glass continuo.
+        # ax,    ay,    dx, dy, sx,   sy,   px,  py,  rw,  rh
         specs = [
-            (0.10, 0.07, 72, 48, 0.055, 0.041, 0.0, 1.7, 250),  # índigo · hero izq.
-            (0.91, 0.12, 64, 54, 0.043, 0.060, 2.1, 0.6, 232),  # violeta · hero der.
-            (0.50, 0.02, 92, 40, 0.038, 0.050, 4.0, 2.4, 244),  # índigo claro · hero centro
-            (0.03, 0.54, 56, 76, 0.061, 0.037, 1.1, 3.3, 212),  # cielo · margen izq.
-            (0.98, 0.60, 52, 70, 0.034, 0.047, 5.2, 1.2, 212),  # turquesa · margen der.
-            (0.16, 0.97, 82, 50, 0.047, 0.045, 3.1, 0.3, 224),  # púrpura · base izq.
+            (0.50,  0.00, 34, 18, 0.10, 0.13, 0.0, 1.7, 430, 150),  # banda hero
+            (0.05,  0.05, 42, 30, 0.16, 0.12, 1.1, 0.4, 205, 205),  # esquina sup. izq.
+            (0.95,  0.09, 40, 34, 0.13, 0.17, 2.1, 0.6, 205, 215),  # esquina sup. der.
+            (-0.02, 0.52, 30, 72, 0.12, 0.10, 3.0, 2.4, 150, 235),  # margen izq.
+            (1.02,  0.58, 28, 66, 0.10, 0.14, 1.6, 1.2, 150, 235),  # margen der.
+            (0.13,  1.02, 60, 30, 0.14, 0.12, 3.1, 0.3, 235, 160),  # base izq.
+            (0.88,  1.03, 54, 28, 0.11, 0.13, 0.7, 2.0, 225, 150),  # base der.
         ]
         return [_Orb(color, peak, *s) for (color, peak), s in zip(S.LIVE_ORBS, specs)]
 
-    # ── Resize: redibuja gradiente y reconstruye los óvalos ───────────────────
+    # ── Resize: reconstruye gradiente + orbes (geometría fija) ────────────────
     def _on_configure(self, e):
+        if e.width == self._cw and e.height == self._ch:
+            return
         self._cw, self._ch = e.width, e.height
-        self._draw_gradient()
-        self._build_orbs()
+        self._rebuild()
         if not self._running:
             self._start()
 
     def _grad_color(self, y):
-        t = y / max(self._ch - 1, 1)
+        t = min(max(y / max(self._ch - 1, 1), 0.0), 1.0)
         return mix(S.LIVE_GRAD_TOP, S.LIVE_GRAD_BOT, t)
 
-    def _draw_gradient(self):
-        self.delete("grad")
+    def _rebuild(self):
+        self.delete("all")
+        self._grad_dy = 0.0
         if self._cw <= 1 or self._ch <= 1:
             return
-        step = 6
-        for y in range(0, self._ch, step):
-            self.create_rectangle(0, y, self._cw, y + step, outline="",
+        self._draw_gradient()
+        self._build_orbs()
+
+    def _draw_gradient(self):
+        # Sobredibuja arriba y abajo (GRAD_OVER) para poder desplazar el
+        # gradiente verticalmente sin que aparezcan huecos en los bordes.
+        for y in range(-GRAD_OVER, self._ch + GRAD_OVER, GRAD_STEP):
+            self.create_rectangle(0, y, self._cw, y + GRAD_STEP, outline="",
                                   fill=self._grad_color(y), tags="grad")
-        self.tag_lower("grad")
 
     def _build_orbs(self):
-        self.delete("orb")
-        for orb in self._orbs:
-            orb.ids = [self.create_oval(0, 0, 0, 0, outline="", tags="orb")
-                       for _ in range(ORB_LAYERS)]
-        self.tag_raise("orb")
-        self._render(recolor=True)
+        for i, orb in enumerate(self._orbs):
+            orb.tag = f"orb{i}"
+            cx, cy = orb.target(self._t, self._cw, self._ch)
+            orb.cx, orb.cy = cx, cy
+            base = self._grad_color(orb.ay * self._ch)   # mezcla contra el fondo en su ancla
+            # De fuera (j=0, ≈base, invisible) hacia dentro (j=N-1, color pleno).
+            for j in range(ORB_LAYERS):
+                frac = j / (ORB_LAYERS - 1)
+                scale = 1.0 - frac * 0.97
+                rw, rh = orb.rw * scale, orb.rh * scale
+                inten = orb.peak * (frac ** 1.7)
+                self.create_oval(cx - rw, cy - rh, cx + rw, cy + rh, outline="",
+                                 fill=mix(base, orb.color, inten), tags=orb.tag)
 
-    # ── Render de un frame ────────────────────────────────────────────────────
-    def _render(self, recolor=False):
+    # ── Animación: sólo traslada bloques (1 llamada Tcl por capa móvil) ───────
+    def _animate(self):
         w, h = self._cw, self._ch
-        if w <= 1 or h <= 1:
-            return
+        # Gradiente: deriva vertical muy lenta (respira) — se mueve en bloque.
+        gdy = GRAD_AMP * math.sin(GRAD_SPD * self._t)
+        if gdy != self._grad_dy:
+            self.move("grad", 0, gdy - self._grad_dy)
+            self._grad_dy = gdy
+        # Orbes: cada uno se traslada por el delta respecto a su centro previo.
         for orb in self._orbs:
-            cx, cy = orb.center(self._t, w, h)
-            base_bg = self._grad_color(cy) if recolor else None
-            R = orb.radius
-            for i, oid in enumerate(orb.ids):
-                frac = i / (ORB_LAYERS - 1)        # 0 fuera → 1 dentro
-                r = R * (1.0 - frac * 0.94)
-                self.coords(oid, cx - r, cy - r, cx + r, cy + r)
-                if recolor:
-                    # intensidad creciente hacia el centro (perfil suave)
-                    inten = orb.peak * (frac ** 1.6)
-                    self.itemconfig(oid, fill=mix(base_bg, orb.color, inten))
+            tx, ty = orb.target(self._t, w, h)
+            self.move(orb.tag, tx - orb.cx, ty - orb.cy)
+            orb.cx, orb.cy = tx, ty
 
     # ── Bucle de animación ────────────────────────────────────────────────────
     def _start(self):
@@ -136,12 +161,14 @@ class LivingBackground(tk.Canvas):
     def _tick(self):
         if not self._running:
             return
+        # Reprograma primero: el timer corre en paralelo al trabajo del frame,
+        # así la cadencia se mantiene ~constante (~60 fps) en vez de sumar
+        # intervalo + cómputo en cada vuelta.
+        self._after = self.after(FPS_MS, self._tick)
         try:
             visible = self.winfo_viewable()
         except Exception:
             visible = True
-        if visible:
+        if visible and self._cw > 1:
             self._t += FPS_MS / 1000.0
-            self._frame += 1
-            self._render(recolor=(self._frame % RECOLOR_EVERY == 0))
-        self._after = self.after(FPS_MS, self._tick)
+            self._animate()

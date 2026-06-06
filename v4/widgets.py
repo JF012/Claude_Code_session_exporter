@@ -236,8 +236,8 @@ class GlassScrollbar(tk.Canvas):
                          takefocus=0)
         self._command = command            # callable estilo yview
         self._first, self._last = 0.0, 1.0
-        self._pad = 3                       # margen del thumb respecto al borde
-        self._min_thumb = 30                # alto mínimo legible del thumb (px)
+        self._pad = 2                       # margen del thumb respecto al borde
+        self._min_thumb = 32                # alto mínimo legible del thumb (px)
         self._hover = False
         self._drag_dy = None                # offset del ratón dentro del thumb
         self.bind("<Configure>", lambda e: self._redraw())
@@ -273,26 +273,33 @@ class GlassScrollbar(tk.Canvas):
         self._paint_thumb()
 
     def _paint_track(self):
-        """Riel tenue de altura completa: ancla el thumb y evita que parezca
-        cortado o flotando en negro."""
+        """Riel fino y tenue de altura completa: ancla el thumb (nunca parece
+        cortado) sin robar protagonismo — más estrecho que el thumb."""
         self.delete("track")
         h, w = self.winfo_height(), self.winfo_width()
         if h <= 1:
             return
-        self._capsule(self._pad, self._pad, w - self._pad, h - self._pad,
+        self._capsule(self._pad + 2, self._pad, w - self._pad - 2, h - self._pad,
                       S.SCROLL_TRACK, tag="track")
 
     def _paint_thumb(self):
+        """Thumb glass de dos tonos: un rim oscuro (cuerpo) con un núcleo más
+        claro inset encima → profundidad en vez de una cápsula plana."""
         self.delete("thumb")
         b = self._thumb_bounds()
         if not b:
             return
         top, bot = b
         w = self.winfo_width()
+        hovering = self._hover or self._drag_dy is not None
+        rim  = S.SCROLL_THUMB if hovering else S.SCROLL_THUMB_BASE
+        core = S.SCROLL_THUMB_HOVER if hovering else S.SCROLL_THUMB
         x0, x1 = self._pad, w - self._pad
-        color = (S.SCROLL_THUMB_HOVER if (self._hover or self._drag_dy is not None)
-                 else S.SCROLL_THUMB)
-        self._capsule(x0, top + self._pad, x1, bot - self._pad, color, tag="thumb")
+        y0, y1 = top + self._pad, bot - self._pad
+        self._capsule(x0, y0, x1, y1, rim, tag="thumb")
+        ci, cj = 2, 3                        # inset del núcleo (horizontal / vertical)
+        if (x1 - x0) > 2 * ci and (y1 - y0) > 2 * cj:
+            self._capsule(x0 + ci, y0 + cj, x1 - ci, y1 - cj, core, tag="thumb")
 
     def _capsule(self, x0, y0, x1, y1, color, *, tag="thumb"):
         """Rectángulo con extremos semicirculares (pill vertical)."""

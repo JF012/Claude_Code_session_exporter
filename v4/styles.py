@@ -53,24 +53,28 @@ CHIP_BG     = "#161b2c"
 CHIP_BORDER = "#2a3149"
 CHIP_HOVER  = "#1e2540"
 
-# ── Scrollbar glass (cápsula slim redondeada, custom canvas) ─────────────────
-SCROLL_TRACK       = "#141c30"   # riel sutil siempre visible (nunca "cortado")
-SCROLL_THUMB       = "#3b4673"   # reposo: vidrio índigo
-SCROLL_THUMB_HOVER = "#5663a8"   # hover / arrastre: índigo vivo
-SCROLL_W           = 14          # ancho reservado de la barra (px)
+# ── Scrollbar glass premium (cápsula con profundidad, custom canvas) ─────────
+# El thumb es un vidrio de dos tonos: un rim oscuro (cuerpo) + un núcleo más
+# claro, para que tenga profundidad en vez de verse plano/uniforme.
+SCROLL_TRACK       = "#0f1626"   # riel: vidrio muy sutil (oscuro)
+SCROLL_THUMB_BASE  = "#2b3556"   # rim / cuerpo del thumb (vidrio índigo oscuro)
+SCROLL_THUMB       = "#47548a"   # núcleo del thumb en reposo (buen contraste)
+SCROLL_THUMB_HOVER = "#6675b8"   # núcleo en hover / arrastre (claramente más vivo)
+SCROLL_W           = 15          # ancho reservado de la barra (px)
 
-# ── Fondo vivo (gradiente lento + orbes con glow) ────────────────────────────
-# Sube en intensidad respecto a v1: el gradiente arranca en un índigo claramente
-# visible arriba (zona hero, detrás del buscador) y se funde con BG_DEEP abajo.
-LIVE_GRAD_TOP = "#1b2548"   # resplandor índigo visible arriba (zona hero)
+# ── Fondo vivo (gradiente índigo + orbes de glow) ────────────────────────────
+# Glass fuerte: gradiente hero marcado y orbes de alta opacidad. Paleta estricta
+# índigo/violeta (índigo #6366f1, índigo claro #818cf8, violeta #a78bfa).
+LIVE_GRAD_TOP = "#222e5a"   # resplandor índigo marcado arriba (zona hero)
 LIVE_GRAD_BOT = "#060a16"   # casi BG_DEEP abajo (se funde con la tabla)
-LIVE_ORBS = [               # (color, intensidad pico 0..1)
-    ("#6366f1", 0.55),      # índigo
-    ("#a78bfa", 0.50),      # violeta
-    ("#818cf8", 0.46),      # índigo claro
-    ("#38bdf8", 0.40),      # cielo
-    ("#2dd4bf", 0.36),      # turquesa
-    ("#c084fc", 0.44),      # púrpura
+LIVE_ORBS = [               # (color, intensidad pico 0..1) — sólo índigo/violeta
+    ("#6366f1", 0.82),      # banda hero · índigo
+    ("#818cf8", 0.78),      # sup. izq · índigo claro
+    ("#a78bfa", 0.76),      # sup. der · violeta
+    ("#6366f1", 0.60),      # margen izq · índigo
+    ("#818cf8", 0.60),      # margen der · índigo claro
+    ("#a78bfa", 0.62),      # base izq · violeta
+    ("#6366f1", 0.56),      # base der · índigo
 ]
 
 # ── Gradiente del logo (glow índigo en el sidebar) ───────────────────────────
