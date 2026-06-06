@@ -180,7 +180,7 @@ class MainTable(tk.Frame):
         self._search = FocusField(self, icon="🔍",
                                   placeholder="Buscar por sesión, proyecto o fecha…",
                                   font=S.font(11))
-        self._search.pack(fill="x", padx=22, pady=(22, 12))
+        self._search.pack(fill="x", padx=22, pady=(30, 14))
         self._search.var.trace_add("write", lambda *_: self._debounce_search())
 
         # ── Título + contador ─────────────────────────────────────────────────

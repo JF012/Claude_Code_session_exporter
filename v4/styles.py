@@ -54,19 +54,23 @@ CHIP_BORDER = "#2a3149"
 CHIP_HOVER  = "#1e2540"
 
 # ── Scrollbar glass (cápsula slim redondeada, custom canvas) ─────────────────
-SCROLL_THUMB       = "#283250"   # reposo: vidrio índigo apagado
-SCROLL_THUMB_HOVER = "#3b477a"   # hover / arrastre: índigo más vivo
+SCROLL_TRACK       = "#141c30"   # riel sutil siempre visible (nunca "cortado")
+SCROLL_THUMB       = "#3b4673"   # reposo: vidrio índigo
+SCROLL_THUMB_HOVER = "#5663a8"   # hover / arrastre: índigo vivo
 SCROLL_W           = 14          # ancho reservado de la barra (px)
 
 # ── Fondo vivo (gradiente lento + orbes con glow) ────────────────────────────
-LIVE_GRAD_TOP = "#0a0e1c"   # leve resplandor índigo arriba
-LIVE_GRAD_BOT = "#050810"   # negro azulado abajo (= BG_DEEP)
+# Sube en intensidad respecto a v1: el gradiente arranca en un índigo claramente
+# visible arriba (zona hero, detrás del buscador) y se funde con BG_DEEP abajo.
+LIVE_GRAD_TOP = "#1b2548"   # resplandor índigo visible arriba (zona hero)
+LIVE_GRAD_BOT = "#060a16"   # casi BG_DEEP abajo (se funde con la tabla)
 LIVE_ORBS = [               # (color, intensidad pico 0..1)
-    ("#6366f1", 0.17),      # índigo
-    ("#a78bfa", 0.15),      # violeta
-    ("#38bdf8", 0.11),      # cielo
-    ("#2dd4bf", 0.10),      # turquesa
-    ("#818cf8", 0.14),      # índigo claro
+    ("#6366f1", 0.55),      # índigo
+    ("#a78bfa", 0.50),      # violeta
+    ("#818cf8", 0.46),      # índigo claro
+    ("#38bdf8", 0.40),      # cielo
+    ("#2dd4bf", 0.36),      # turquesa
+    ("#c084fc", 0.44),      # púrpura
 ]
 
 # ── Gradiente del logo (glow índigo en el sidebar) ───────────────────────────

@@ -134,16 +134,19 @@ class StatusBar(tk.Frame):
     def spin(self, text):  self.set(f"◌  {text}", S.ACCENT)
 
     def export_done(self, filename, size_kb):
-        """Confirmación de exportación elegante, con jerarquía tipográfica:
-        ✓  Exportado  ·  nombre_archivo.md  ·  12.3 KB
+        """Confirmación de exportación con jerarquía tipográfica y el nombre del
+        archivo destacado en un chip índigo:
+            ✓  Exportado   [ nombre_archivo.md ]   12.3 KB
         """
         self._clear()
         self._dot.config(fg=S.SUCCESS)
         self._label("✓", S.SUCCESS, S.font(11, "bold"), padx=(0, 9))
         self._label("Exportado", S.TEXT_SOFT, S.font(9, "bold"))
-        self._label("•", S.TEXT_DIM, S.font(8), padx=11)
-        self._label(filename, S.ACCENT_SOFT, S.mono(9, "bold"))
-        self._label("•", S.TEXT_DIM, S.font(8), padx=11)
+        chip = tk.Label(self._seg, text=filename, bg=S.CHIP_BG, fg=S.ACCENT_SOFT,
+                        font=S.mono(9, "bold"), padx=9, pady=2,
+                        highlightthickness=1, highlightbackground=S.CHIP_BORDER,
+                        highlightcolor=S.CHIP_BORDER)
+        chip.pack(side="left", padx=11)
         self._label(f"{size_kb:.1f} KB", S.TEXT_DIM, S.font(9))
         self.update_idletasks()
 
@@ -233,7 +236,7 @@ class GlassScrollbar(tk.Canvas):
                          takefocus=0)
         self._command = command            # callable estilo yview
         self._first, self._last = 0.0, 1.0
-        self._pad = 4                       # margen del thumb respecto al borde
+        self._pad = 3                       # margen del thumb respecto al borde
         self._min_thumb = 30                # alto mínimo legible del thumb (px)
         self._hover = False
         self._drag_dy = None                # offset del ratón dentro del thumb
@@ -264,7 +267,20 @@ class GlassScrollbar(tk.Canvas):
 
     def _redraw(self):
         self.delete("all")
+        if self._thumb_bounds() is None:
+            return                          # contenido completo → barra oculta
+        self._paint_track()
         self._paint_thumb()
+
+    def _paint_track(self):
+        """Riel tenue de altura completa: ancla el thumb y evita que parezca
+        cortado o flotando en negro."""
+        self.delete("track")
+        h, w = self.winfo_height(), self.winfo_width()
+        if h <= 1:
+            return
+        self._capsule(self._pad, self._pad, w - self._pad, h - self._pad,
+                      S.SCROLL_TRACK, tag="track")
 
     def _paint_thumb(self):
         self.delete("thumb")
@@ -276,17 +292,17 @@ class GlassScrollbar(tk.Canvas):
         x0, x1 = self._pad, w - self._pad
         color = (S.SCROLL_THUMB_HOVER if (self._hover or self._drag_dy is not None)
                  else S.SCROLL_THUMB)
-        self._capsule(x0, top + self._pad, x1, bot - self._pad, color)
+        self._capsule(x0, top + self._pad, x1, bot - self._pad, color, tag="thumb")
 
-    def _capsule(self, x0, y0, x1, y1, color):
+    def _capsule(self, x0, y0, x1, y1, color, *, tag="thumb"):
         """Rectángulo con extremos semicirculares (pill vertical)."""
         if y1 - y0 < 2:
             y1 = y0 + 2
         d = x1 - x0                          # diámetro de las tapas
         self.create_rectangle(x0, y0 + d / 2, x1, y1 - d / 2,
-                              fill=color, outline="", tags="thumb")
-        self.create_oval(x0, y0, x1, y0 + d, fill=color, outline="", tags="thumb")
-        self.create_oval(x0, y1 - d, x1, y1, fill=color, outline="", tags="thumb")
+                              fill=color, outline="", tags=tag)
+        self.create_oval(x0, y0, x1, y0 + d, fill=color, outline="", tags=tag)
+        self.create_oval(x0, y1 - d, x1, y1, fill=color, outline="", tags=tag)
 
     # ── Interacción ───────────────────────────────────────────────────────────
     def _set_hover(self, on):

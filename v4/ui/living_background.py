@@ -15,7 +15,7 @@ import tkinter as tk
 import styles as S
 from core.utils import mix
 
-ORB_LAYERS  = 16     # óvalos concéntricos por orbe (cuantos más, más suave el glow)
+ORB_LAYERS  = 18     # óvalos concéntricos por orbe (cuantos más, más suave el glow)
 FPS_MS      = 33     # ~30 fps; el movimiento ya es lento de por sí
 RECOLOR_EVERY = 6    # recolorea cada N frames (el color cambia despacio)
 
@@ -56,13 +56,18 @@ class LivingBackground(tk.Canvas):
 
     # ── Orbes (parámetros fijos → estable entre ejecuciones) ──────────────────
     def _make_orbs(self):
+        # Anclas sesgadas hacia bordes y zona superior: ahí es donde el canvas
+        # asoma de verdad (banda hero sobre el buscador + márgenes), porque el
+        # centro queda tapado por la tabla opaca. Radios grandes → el glow
+        # florece dentro de los márgenes visibles.
         # ax,   ay,   rx, ry, sx,    sy,    px,  py,  radio
         specs = [
-            (0.16, 0.18, 74, 48, 0.055, 0.041, 0.0, 1.7, 158),
-            (0.84, 0.26, 66, 54, 0.043, 0.060, 2.1, 0.6, 138),
-            (0.30, 0.80, 84, 60, 0.038, 0.050, 4.0, 2.4, 172),
-            (0.74, 0.72, 58, 66, 0.061, 0.037, 1.1, 3.3, 146),
-            (0.50, 0.48, 96, 44, 0.034, 0.047, 5.2, 1.2, 128),
+            (0.10, 0.07, 72, 48, 0.055, 0.041, 0.0, 1.7, 250),  # índigo · hero izq.
+            (0.91, 0.12, 64, 54, 0.043, 0.060, 2.1, 0.6, 232),  # violeta · hero der.
+            (0.50, 0.02, 92, 40, 0.038, 0.050, 4.0, 2.4, 244),  # índigo claro · hero centro
+            (0.03, 0.54, 56, 76, 0.061, 0.037, 1.1, 3.3, 212),  # cielo · margen izq.
+            (0.98, 0.60, 52, 70, 0.034, 0.047, 5.2, 1.2, 212),  # turquesa · margen der.
+            (0.16, 0.97, 82, 50, 0.047, 0.045, 3.1, 0.3, 224),  # púrpura · base izq.
         ]
         return [_Orb(color, peak, *s) for (color, peak), s in zip(S.LIVE_ORBS, specs)]
 
