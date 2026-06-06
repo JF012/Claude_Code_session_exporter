@@ -15,6 +15,7 @@ import tkinter.font as tkfont
 import styles as S
 from core.utils import format_ts
 from widgets import FocusField, ScrollableFrame, make_chip, make_badge, Tooltip
+from ui.living_background import LivingBackground
 
 # Anchos fijos (px) de las columnas no elásticas; la sesión ocupa el resto.
 COL_DATE = 132
@@ -168,13 +169,18 @@ class MainTable(tk.Frame):
         self._f_title = tkfont.Font(family=S.FONT_UI, size=10)
         self._f_prev  = tkfont.Font(family=S.FONT_UI, size=9)
 
-        # ── Buscador grande ───────────────────────────────────────────────────
-        top = tk.Frame(self, bg=S.BG_DEEP)
-        top.pack(fill="x", padx=22, pady=(18, 12))
-        self._search = FocusField(top, icon="🔍",
+        # ── Fondo vivo (capa inferior; asoma sólo por los márgenes) ───────────
+        # Se crea antes que el resto de hijos → queda al fondo del apilado.
+        # (En un Canvas, .lower() baja un item, no el widget: usamos Misc.lower.)
+        self._bg = LivingBackground(self)
+        self._bg.place(x=0, y=0, relwidth=1, relheight=1)
+        tk.Misc.lower(self._bg)
+
+        # ── Buscador grande (flota sobre la zona hero del fondo vivo) ─────────
+        self._search = FocusField(self, icon="🔍",
                                   placeholder="Buscar por sesión, proyecto o fecha…",
                                   font=S.font(11))
-        self._search.pack(fill="x")
+        self._search.pack(fill="x", padx=22, pady=(22, 12))
         self._search.var.trace_add("write", lambda *_: self._debounce_search())
 
         # ── Título + contador ─────────────────────────────────────────────────

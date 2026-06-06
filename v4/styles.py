@@ -53,6 +53,22 @@ CHIP_BG     = "#161b2c"
 CHIP_BORDER = "#2a3149"
 CHIP_HOVER  = "#1e2540"
 
+# ── Scrollbar glass (cápsula slim redondeada, custom canvas) ─────────────────
+SCROLL_THUMB       = "#283250"   # reposo: vidrio índigo apagado
+SCROLL_THUMB_HOVER = "#3b477a"   # hover / arrastre: índigo más vivo
+SCROLL_W           = 14          # ancho reservado de la barra (px)
+
+# ── Fondo vivo (gradiente lento + orbes con glow) ────────────────────────────
+LIVE_GRAD_TOP = "#0a0e1c"   # leve resplandor índigo arriba
+LIVE_GRAD_BOT = "#050810"   # negro azulado abajo (= BG_DEEP)
+LIVE_ORBS = [               # (color, intensidad pico 0..1)
+    ("#6366f1", 0.17),      # índigo
+    ("#a78bfa", 0.15),      # violeta
+    ("#38bdf8", 0.11),      # cielo
+    ("#2dd4bf", 0.10),      # turquesa
+    ("#818cf8", 0.14),      # índigo claro
+]
+
 # ── Gradiente del logo (glow índigo en el sidebar) ───────────────────────────
 GLOW_TOP_RGB = (12, 16, 32)    # casi negro azulado
 GLOW_BOT_RGB = (40, 38, 88)    # índigo apagado

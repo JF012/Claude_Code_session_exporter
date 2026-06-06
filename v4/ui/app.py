@@ -279,7 +279,7 @@ class App(tk.Tk):
         self._toolbar.set_export_enabled(True)
         size_kb = len(content.encode("utf-8")) / 1024
         if has_readable_turns(content):
-            self._status.ok(f"Exportado → {out_path.name}  ({size_kb:.1f} KB)")
+            self._status.export_done(out_path.name, size_kb)
         else:
             self._status.warn(f"Sesión sin contenido legible → {out_path.name}")
 

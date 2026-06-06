@@ -11,6 +11,7 @@ import tkinter as tk
 
 import styles as S
 from core.exporter import session_to_markdown
+from widgets import GlassScrollbar
 
 WIDTH = 366
 MAX_CHARS = 16000          # corta previews enormes para mantener la fluidez
@@ -38,10 +39,7 @@ class PreviewPanel(tk.Frame):
             highlightthickness=0, wrap="word", padx=8, pady=6,
             font=S.font(10), insertwidth=0, cursor="arrow", spacing1=1, spacing3=2,
         )
-        sb = tk.Scrollbar(body, orient="vertical", command=self._text.yview,
-                          bg=S.BORDER, troughcolor=S.BG_GLASS, bd=0,
-                          activebackground=S.TEXT_DIM, relief="flat", width=10,
-                          highlightthickness=0)
+        sb = GlassScrollbar(body, self._text.yview, bg=S.BG_GLASS)
         self._text.configure(yscrollcommand=sb.set)
         self._text.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")

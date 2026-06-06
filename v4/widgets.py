@@ -97,18 +97,34 @@ class RoundedButton(tk.Button):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class StatusBar(tk.Frame):
-    """Barra de estado inferior con un punto de color y un mensaje semántico."""
+    """Barra de estado inferior: punto de color + mensaje semántico.
+
+    El mensaje se compone de segmentos (etiquetas independientes) para poder
+    mezclar tipografías y colores en una misma línea — clave para la
+    confirmación de exportación, que resalta el nombre del archivo.
+    """
     def __init__(self, parent):
-        super().__init__(parent, bg=S.BG_DEEP, height=30)
+        super().__init__(parent, bg=S.BG_DEEP, height=32)
+        self.pack_propagate(False)
         self._dot = tk.Label(self, text="●", font=S.font(8), bg=S.BG_DEEP, fg=S.TEXT_DIM)
-        self._msg = tk.Label(self, text="Listo", font=S.font(9),
-                             bg=S.BG_DEEP, fg=S.TEXT_DIM, anchor="w")
-        self._dot.pack(side="left", padx=(20, 7), pady=7)
-        self._msg.pack(side="left", fill="x", expand=True, pady=7)
+        self._dot.pack(side="left", padx=(20, 9))
+        self._seg = tk.Frame(self, bg=S.BG_DEEP)
+        self._seg.pack(side="left", fill="both", expand=True)
+        self.set("Listo")
+
+    # ── Composición de segmentos ──────────────────────────────────────────────
+    def _clear(self):
+        for w in self._seg.winfo_children():
+            w.destroy()
+
+    def _label(self, text, color, fnt, padx=0):
+        tk.Label(self._seg, text=text, bg=S.BG_DEEP, fg=color, font=fnt
+                 ).pack(side="left", padx=padx)
 
     def set(self, text, color=S.TEXT_DIM):
-        self._msg.config(text=text, fg=color)
+        self._clear()
         self._dot.config(fg=color)
+        self._label(text, color, S.font(9))
         self.update_idletasks()
 
     def ok(self, text):    self.set(f"✔  {text}", S.SUCCESS)
@@ -116,6 +132,20 @@ class StatusBar(tk.Frame):
     def warn(self, text):  self.set(f"⚠  {text}", S.WARNING)
     def error(self, text): self.set(f"✖  {text}", S.DANGER)
     def spin(self, text):  self.set(f"◌  {text}", S.ACCENT)
+
+    def export_done(self, filename, size_kb):
+        """Confirmación de exportación elegante, con jerarquía tipográfica:
+        ✓  Exportado  ·  nombre_archivo.md  ·  12.3 KB
+        """
+        self._clear()
+        self._dot.config(fg=S.SUCCESS)
+        self._label("✓", S.SUCCESS, S.font(11, "bold"), padx=(0, 9))
+        self._label("Exportado", S.TEXT_SOFT, S.font(9, "bold"))
+        self._label("•", S.TEXT_DIM, S.font(8), padx=11)
+        self._label(filename, S.ACCENT_SOFT, S.mono(9, "bold"))
+        self._label("•", S.TEXT_DIM, S.font(8), padx=11)
+        self._label(f"{size_kb:.1f} KB", S.TEXT_DIM, S.font(9))
+        self.update_idletasks()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -187,6 +217,107 @@ class FocusField(tk.Frame):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  SCROLLBAR GLASS (cápsula slim redondeada, dibujada a mano)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class GlassScrollbar(tk.Canvas):
+    """Scrollbar vertical slim y moderna, acorde al glassmorphism de la app.
+
+    Implementa el protocolo de tk.Scrollbar (`set` como yscrollcommand + un
+    `command` tipo yview), así que es un reemplazo directo para Canvas o Text.
+    Sin flechas ni pista visible: sólo una cápsula redondeada que se ilumina en
+    hover y se oculta cuando todo el contenido cabe en pantalla.
+    """
+    def __init__(self, parent, command, *, bg=S.BG_DEEP, width=S.SCROLL_W):
+        super().__init__(parent, width=width, bg=bg, highlightthickness=0, bd=0,
+                         takefocus=0)
+        self._command = command            # callable estilo yview
+        self._first, self._last = 0.0, 1.0
+        self._pad = 4                       # margen del thumb respecto al borde
+        self._min_thumb = 30                # alto mínimo legible del thumb (px)
+        self._hover = False
+        self._drag_dy = None                # offset del ratón dentro del thumb
+        self.bind("<Configure>", lambda e: self._redraw())
+        self.bind("<Button-1>", self._on_press)
+        self.bind("<B1-Motion>", self._on_motion)
+        self.bind("<ButtonRelease-1>", lambda e: self._end_drag())
+        self.bind("<Enter>", lambda e: self._set_hover(True))
+        self.bind("<Leave>", lambda e: self._set_hover(False))
+
+    # ── Protocolo yscrollcommand ──────────────────────────────────────────────
+    def set(self, first, last):
+        self._first, self._last = float(first), float(last)
+        self._redraw()
+
+    # ── Geometría del thumb ───────────────────────────────────────────────────
+    def _thumb_bounds(self):
+        h = self.winfo_height()
+        if h <= 1 or (self._first <= 0.0 and self._last >= 1.0):
+            return None                     # contenido completo → sin thumb
+        top, bot = self._first * h, self._last * h
+        if bot - top < self._min_thumb:     # respeta un tamaño mínimo
+            mid = (top + bot) / 2
+            top, bot = mid - self._min_thumb / 2, mid + self._min_thumb / 2
+            if top < 0:   top, bot = 0, self._min_thumb
+            if bot > h:   top, bot = h - self._min_thumb, h
+        return top, bot
+
+    def _redraw(self):
+        self.delete("all")
+        self._paint_thumb()
+
+    def _paint_thumb(self):
+        self.delete("thumb")
+        b = self._thumb_bounds()
+        if not b:
+            return
+        top, bot = b
+        w = self.winfo_width()
+        x0, x1 = self._pad, w - self._pad
+        color = (S.SCROLL_THUMB_HOVER if (self._hover or self._drag_dy is not None)
+                 else S.SCROLL_THUMB)
+        self._capsule(x0, top + self._pad, x1, bot - self._pad, color)
+
+    def _capsule(self, x0, y0, x1, y1, color):
+        """Rectángulo con extremos semicirculares (pill vertical)."""
+        if y1 - y0 < 2:
+            y1 = y0 + 2
+        d = x1 - x0                          # diámetro de las tapas
+        self.create_rectangle(x0, y0 + d / 2, x1, y1 - d / 2,
+                              fill=color, outline="", tags="thumb")
+        self.create_oval(x0, y0, x1, y0 + d, fill=color, outline="", tags="thumb")
+        self.create_oval(x0, y1 - d, x1, y1, fill=color, outline="", tags="thumb")
+
+    # ── Interacción ───────────────────────────────────────────────────────────
+    def _set_hover(self, on):
+        self._hover = on
+        self._paint_thumb()
+
+    def _on_press(self, e):
+        b = self._thumb_bounds()
+        if not b:
+            return
+        top, bot = b
+        if top <= e.y <= bot:
+            self._drag_dy = e.y - top        # empezar arrastre
+            self._paint_thumb()
+        else:
+            self._command("scroll", 1 if e.y > bot else -1, "pages")
+
+    def _on_motion(self, e):
+        if self._drag_dy is None:
+            return
+        h = self.winfo_height()
+        if h > 1:
+            frac = (e.y - self._drag_dy) / h
+            self._command("moveto", max(0.0, min(1.0, frac)))
+
+    def _end_drag(self):
+        self._drag_dy = None
+        self._paint_thumb()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  CONTENEDOR SCROLLABLE
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -199,10 +330,7 @@ class ScrollableFrame(tk.Frame):
     def __init__(self, parent, *, bg=S.BG_DEEP):
         super().__init__(parent, bg=bg)
         self.canvas = tk.Canvas(self, bg=bg, highlightthickness=0, bd=0)
-        self._sb = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview,
-                                bg=S.BORDER, troughcolor=bg, bd=0,
-                                activebackground=S.TEXT_DIM, relief="flat", width=10,
-                                highlightthickness=0)
+        self._sb = GlassScrollbar(self, self.canvas.yview, bg=bg)
         self.canvas.configure(yscrollcommand=self._sb.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         self._sb.pack(side="right", fill="y")
