@@ -25,7 +25,8 @@ class Toolbar(tk.Frame):
                  font=S.font(9)).pack(side="left", padx=(0, 11))
 
         self.dir_var = tk.StringVar(value=str(out_dir))
-        self._field = FocusField(row, textvariable=self.dir_var, mono=True)
+        self._field = FocusField(row, textvariable=self.dir_var, mono=True,
+                                 radius=S.RADIUS_CTRL)
 
         # ── Derecha: acciones ─────────────────────────────────────────────────
         self._btn_export = RoundedButton(row, "⬇   Export to Markdown", on_export,

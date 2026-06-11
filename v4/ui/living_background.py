@@ -16,6 +16,16 @@ Rendimiento (60 fps reales, fluido y sin tirones):
     `.paste()` —sin reasignar imágenes Tk ni recolorear nada—. El pacing es
     estable → fluidez real, no la sensación de bajo FPS del enfoque anterior.
 
+Apertura ligera (la app debe sentirse instantánea al abrir):
+  · El horneado arranca con un pequeño retraso (BUILD_DELAY_MS) para que el
+    primer pintado de la ventana y el escaneo de sesiones tomen la delantera.
+  · El fotograma 0 se entrega EN CUANTO existe (~150 ms): el fondo aparece ya
+    compuesto (estático) y el loop completo lo releva después desde ese mismo
+    fotograma → sin salto visible ni "pop" tardío.
+  · Mientras sólo está el fotograma estático no se re-pinta nada en cada tick,
+    y con la app sin foco la animación baja a ~12 fps (misma velocidad de
+    deriva, menos CPU); recupera 60 fps al volver el foco.
+
 El loop es perfectamente periódico (toda deriva es sin(2π·k·i/N) con k entero),
 así que al volver al fotograma 0 no hay salto. La paleta vive en `styles.py`.
 
@@ -26,6 +36,7 @@ estático para que la app nunca rompa.
 import math
 import random
 import threading
+import time
 import tkinter as tk
 
 import styles as S
@@ -39,12 +50,16 @@ except Exception:                      # pragma: no cover
 
 
 # ── Parámetros de render ──────────────────────────────────────────────────────
-FPS_MS      = 16        # ~60 fps
+FPS_MS      = 16        # ~60 fps con la app enfocada
+SLOW_EVERY  = 5         # sin foco: avanza 1 de cada 5 ticks (~12 fps, misma deriva)
 LOOP_FRAMES = 260       # fotogramas del loop → ~4.3 s a 60 fps (deriva lenta)
-IW, IH      = 252, 240  # lienzo interno (baja res); se estira al tamaño real
+IW, IH      = 224, 216  # lienzo interno (baja res); se estira al tamaño real.
+                        # Tras el blur + upscale BILINEAR el resultado es
+                        # indistinguible de 252×240 y el horneado baja ~25 %.
 DRIFT_M     = 16        # margen vertical para la respiración del gradiente (px)
 BLUR        = IW * 0.058  # radio de blur ≈ filter: blur() de la extensión
 GLOW_D      = 200       # diámetro del glow radial base (se reescala por orbe)
+BUILD_DELAY_MS = 160    # respiro para el primer pintado + arranque del escaneo
 
 # Orbes: glow radial índigo/violeta compuesto por alpha (como las .orb de la
 # extensión: radial-gradient + opacity). Bias a la banda hero (arriba) y a los
@@ -82,6 +97,8 @@ class LivingBackground(tk.Canvas):
         self._running = False
         self._after = None
         self._build_started = False
+        self._single_done = False  # fotograma estático inicial ya pintado
+        self._slow = 0             # contador de ticks en modo sin foco (~12 fps)
         self.bind("<Configure>", self._on_configure)
         self.bind("<Destroy>", lambda e: self._stop())
 
@@ -95,7 +112,10 @@ class LivingBackground(tk.Canvas):
             return
         if not self._build_started and self._cw > 1:
             self._build_started = True
-            threading.Thread(target=self._build_frames, daemon=True).start()
+            # Arranque diferido: el primer pintado de la ventana y el hilo de
+            # escaneo de sesiones toman la delantera antes de hornear el loop.
+            self.after(BUILD_DELAY_MS, lambda: threading.Thread(
+                target=self._build_frames, daemon=True).start())
         if not self._running and self._cw > 1:
             self._start()
 
@@ -103,9 +123,16 @@ class LivingBackground(tk.Canvas):
     def _build_frames(self):
         grad = self._make_gradient()          # gradiente alto (con margen de deriva)
         glow = self._make_glow()              # glow radial base (canal alpha)
-        frames = []
-        for i in range(LOOP_FRAMES):
+        first = self._compose(0, grad, glow)
+        # El fotograma 0 se entrega ya: el fondo aparece compuesto (estático)
+        # mientras el resto del loop se hornea. Al instalarse el loop completo
+        # la animación continúa desde este mismo fotograma → sin salto.
+        self._pending = [first]
+        frames = [first]
+        for i in range(1, LOOP_FRAMES):
             frames.append(self._compose(i, grad, glow))
+            if i % 16 == 0:
+                time.sleep(0)                 # cede el GIL al escaneo y a la UI
         # Handoff seguro al hilo principal: asignación de referencia (atómica por
         # el GIL). El _tick (hilo principal) la recoge → sin after() entre hilos.
         self._pending = frames
@@ -183,24 +210,44 @@ class LivingBackground(tk.Canvas):
         self._after = self.after(FPS_MS, self._tick)
         if self._pending is not None:        # frames listos desde el hilo
             self._frames, self._pending = self._pending, None
+            self._single_done = False
         if not self._frames or self._cw <= 1:
             return
         try:
             if not self.winfo_viewable():
                 return
+            unfocused = self.focus_displayof() is None
         except Exception:
-            pass
-        self._idx = (self._idx + 1) % len(self._frames)
+            unfocused = False
+        static = len(self._frames) == 1
+        # Fotograma estático inicial: una vez pintado no hay nada que animar.
+        if static and self._single_done and (self._pw, self._ph) == (self._cw, self._ch):
+            return
+        step = 1
+        if unfocused and not static:
+            # Sin foco: 1 repintado de cada SLOW_EVERY ticks, avanzando el índice
+            # en bloque → misma velocidad de deriva con ~1/5 del coste.
+            self._slow += 1
+            if self._slow % SLOW_EVERY:
+                return
+            step = SLOW_EVERY
+        else:
+            self._slow = 0
+        self._idx = (self._idx + step) % len(self._frames)
         big = self._frames[self._idx].resize((self._cw, self._ch), Image.BILINEAR)
         if self._photo is None or (self._pw, self._ph) != (self._cw, self._ch):
             self._photo = ImageTk.PhotoImage(big)
             self._pw, self._ph = self._cw, self._ch
             if self._img_id is None:
                 self._img_id = self.create_image(0, 0, anchor="nw", image=self._photo)
+                # Siempre al fondo: por encima puede haber overlays (la tarjeta
+                # redondeada de MainTable se dibuja como item de este canvas).
+                self.tag_lower(self._img_id)
             else:
                 self.itemconfig(self._img_id, image=self._photo)
         else:
             self._photo.paste(big)        # vuelca en sitio → sin reasignar imagen Tk
+        self._single_done = static
 
     # ── Fallback sin Pillow: degradado estático (la app nunca rompe) ──────────
     def _draw_static_gradient(self):

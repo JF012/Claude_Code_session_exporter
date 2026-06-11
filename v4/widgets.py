@@ -21,6 +21,8 @@ try:
 except Exception:                      # pragma: no cover
     _HAS_PIL = False
 
+HAS_PIL = _HAS_PIL                     # para que otros módulos elijan su fallback
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  HELPERS DE IMAGEN GLASS (rounded rect con AA, bisel, borde y sombra)
@@ -98,6 +100,63 @@ def glass_field_image(w, h, *, radius, surface, focused=False, pad=8, shadow=Tru
                                            width=max(ss, 1))
 
     return ImageTk.PhotoImage(base.resize((w, h), Image.LANCZOS))
+
+
+def _solid_alpha(size, rgb, alpha):
+    """Capa RGBA de color sólido `rgb` cuyo canal alpha es la máscara `alpha`."""
+    layer = Image.new("RGBA", size, rgb + (0,))
+    layer.putalpha(alpha)
+    return layer
+
+
+def rounded_card_image(w, h, *, radius, margin, surface=None):
+    """Tarjeta de contenido redondeada como PhotoImage RGBA (fondo transparente).
+
+    Pensada para colocarse como ITEM del canvas del fondo vivo: fuera del
+    contorno el alpha es 0, así las esquinas redondeadas dejan ver la animación
+    de detrás sin componer nada por fotograma (coste cero en el tick). Lleva
+    horneados la sombra difusa (sólo lados/base: arriba está el glow hero y una
+    sombra ahí dibujaría un halo oscuro), el bisel superior y el borde suave.
+    El interior es plano (`surface`) para fundirse con el Frame de contenido
+    que vive encima. `margin` es el aire transparente donde respira la sombra.
+    """
+    ss = 2
+    w, h = max(int(w), 1), max(int(h), 1)
+    W, H = w * ss, h * ss
+    M = margin * ss
+    box = [M, M, W - M, H - M]
+    r = max(1, min(int(radius * ss), (box[3] - box[1]) // 2))
+    surface = surface if surface is not None else S.BG_CARD
+
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+
+    # 1) Sombra difusa, desplazada hacia abajo para no manchar el glow superior
+    sh = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(sh).rounded_rectangle(
+        [box[0], box[1] + 10 * ss, box[2], box[3] + 4 * ss], radius=r, fill=100)
+    sh = sh.filter(ImageFilter.GaussianBlur(6 * ss))
+    img = Image.alpha_composite(img, _solid_alpha((W, H), S.SHADOW_RGB, sh))
+
+    # 2) Cuerpo plano (mismo color que el Frame interior → unión invisible)
+    body = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(body).rounded_rectangle(box, radius=r, fill=255)
+    img = Image.alpha_composite(img, _solid_alpha((W, H), _hex_to_rgb(surface), body))
+
+    # 3) Bisel superior (línea clara interior que se apaga hacia abajo)
+    hi = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(hi).rounded_rectangle(
+        [box[0] + ss, box[1] + ss, box[2] - ss, box[3] - ss],
+        radius=max(r - ss, 1), outline=255, width=max(ss, 1))
+    hi = ImageChops.multiply(hi, _v_grad_L(W, H, 255, 0)).point(lambda v: int(v * 0.9))
+    img = Image.alpha_composite(img, _solid_alpha((W, H), _hex_to_rgb(S.CARD_HILITE), hi))
+
+    # 4) Borde suave de cierre
+    bd = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(bd).rounded_rectangle(
+        box, radius=r, outline=_hex_to_rgb(S.CARD_BORDER) + (255,), width=max(ss, 1))
+    img = Image.alpha_composite(img, bd)
+
+    return ImageTk.PhotoImage(img.resize((w, h), Image.LANCZOS))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -208,7 +267,7 @@ class _RoundedButtonCanvas(tk.Canvas):
             fill, border, fg = s["hover_bg"], s["hover_border"], s["hover_fg"]
         else:
             fill, border, fg = s["bg"], s["border"], s["fg"]
-        r = min(h // 2, 13)
+        r = min(h // 2, S.RADIUS_CTRL)
         self._photo = _rounded_btn_image(
             w, h, r, _hex_to_rgb(fill), _hex_to_rgb(border), 1,
             _hex_to_rgb(self._surface))
@@ -491,10 +550,13 @@ class _FocusFieldGlass(tk.Canvas):
 
 
 class _FocusFieldFlat(tk.Frame):
-    """Fallback sin Pillow: Entry en un marco con borde que se ilumina al enfocar."""
+    """Fallback sin Pillow: Entry en un marco con borde que se ilumina al enfocar.
+
+    Acepta (e ignora) los kwargs estéticos de la variante glass —radius, shadow,
+    surface…— para que los llamadores no tengan que distinguir variantes."""
     def __init__(self, parent, *, textvariable=None, font=None, icon=None,
                  placeholder=None, mono=False, surface=S.BG_PANEL,
-                 radius=None, height=None):
+                 radius=None, height=None, shadow=True):
         super().__init__(parent, bg=S.BG_PANEL, bd=0, highlightthickness=1,
                          highlightbackground=S.BORDER, highlightcolor=S.BORDER)
         self.var = textvariable or tk.StringVar()

@@ -58,6 +58,10 @@ CHIP_BG     = "#161b2c"
 CHIP_BORDER = "#2a3149"
 CHIP_HOVER  = "#1e2540"
 
+# ── Radios de esquina (escala única → la UI no mezcla curvaturas) ────────────
+RADIUS_CTRL = 13   # controles: botones, buscador, campo de ruta
+RADIUS_CARD = 16   # superficies grandes: tarjeta de contenido central
+
 # ── Campos glass (inputs premium: gradiente, borde suave, sombra y foco) ──────
 # Render con Pillow (rounded rect supersampleado) → esquinas redondeadas reales,
 # bisel superior, borde suave y sombra difusa que tk no puede dar por sí solo.

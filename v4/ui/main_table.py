@@ -14,15 +14,25 @@ import tkinter.font as tkfont
 
 import styles as S
 from core.utils import format_ts
-from widgets import FocusField, ScrollableFrame, make_chip, make_badge, Tooltip
+from widgets import (FocusField, ScrollableFrame, make_chip, make_badge,
+                     Tooltip, rounded_card_image, HAS_PIL)
 from ui.living_background import LivingBackground
 
 # Anchos fijos (px) de las columnas no elásticas; la sesión ocupa el resto.
-COL_DATE = 132
-COL_PROJ = 150
-COL_MSGS = 58
+# Ajustados a su contenido real ("2026-06-06 07:55" ≈ 90 px, badge ≈ 34 px)
+# para ceder el máximo de ancho a la columna de sesión (título + preview).
+COL_DATE = 104
+COL_PROJ = 140
+COL_MSGS = 50
 ROW_H    = 62
 MAX_ROWS = 400          # tope defensivo para no renderizar miles de filas
+
+# Tarjeta de contenido: el contorno redondeado se dibuja como imagen RGBA sobre
+# el canvas del fondo vivo; el Frame real (cuadrado) vive INSET px dentro del
+# contorno para que sus esquinas rectas queden siempre bajo el vidrio.
+# INSET debe ser ≥ 0.3·RADIUS_CARD para que la esquina recta no asome del arco.
+CARD_INSET  = 7
+CARD_SHADOW = 14        # aire transparente alrededor (donde respira la sombra)
 
 
 def _truncate(text, font: tkfont.Font, max_px: int) -> str:
@@ -177,23 +187,36 @@ class MainTable(tk.Frame):
         tk.Misc.lower(self._bg)
 
         # ── Buscador glass (flota sobre la zona hero del fondo vivo) ──────────
+        # Mismo radio que los botones y borde visual alineado con la tarjeta
+        # (padx 14 + 8 px de margen interno de la imagen = 22 px de margen real).
         self._search = FocusField(self, icon="🔍",
                                   placeholder="Search by session, project or date…",
-                                  font=S.font(11), surface=S.HERO_SURFACE, radius=16,
-                                  shadow=False)
-        self._search.pack(fill="x", padx=18, pady=(30, 14))
+                                  font=S.font(11), surface=S.HERO_SURFACE,
+                                  radius=S.RADIUS_CTRL, shadow=False)
+        self._search.pack(fill="x", padx=14, pady=(30, 14))
         self._search.var.trace_add("write", lambda *_: self._debounce_search())
 
         # ── Tarjeta de contenido (panel elevado que flota sobre el fondo vivo) ─
-        # Unifica título + columnas + lista en una sola superficie elevada con un
-        # bisel superior, en vez de varias barras oscuras sueltas sobre el glow.
+        # Unifica título + columnas + lista en una sola superficie elevada. Con
+        # Pillow, su contorno redondeado (sombra + bisel + borde) se dibuja como
+        # overlay RGBA sobre el canvas del fondo y este Frame queda CARD_INSET px
+        # dentro; el borde visible cae así a 22 px, alineado con el buscador.
         card = tk.Frame(self, bg=S.BG_CARD)
-        card.pack(fill="both", expand=True, padx=14, pady=(2, 12))
-        tk.Frame(card, bg=S.CARD_HILITE, height=1).pack(fill="x")   # bisel superior
+        card.pack(fill="both", expand=True, padx=22 + CARD_INSET,
+                  pady=(2 + CARD_INSET, 12 + CARD_INSET))
+        self._card = card
+        self._card_item = None      # item de imagen del overlay (canvas del fondo)
+        self._card_photo = None     # ref viva de la PhotoImage (anti-GC)
+        self._card_after = None
+        if HAS_PIL:
+            card.bind("<Configure>", self._on_card_configure)
+        else:
+            # Fallback plano: bisel superior de 1 px, como hasta ahora.
+            tk.Frame(card, bg=S.CARD_HILITE, height=1).pack(fill="x")
 
         # Título + contador
         head = tk.Frame(card, bg=S.BG_CARD)
-        head.pack(fill="x", padx=20, pady=(15, 10))
+        head.pack(fill="x", padx=13, pady=(9, 10))
         tk.Label(head, text="Recent sessions", bg=S.BG_CARD, fg=S.TEXT,
                  font=S.font(12, "bold")).pack(side="left")
         self._count = make_badge(head, "0", fg=S.ACCENT_SOFT, bg=S.BG_ELEV, font_size=9)
@@ -201,7 +224,7 @@ class MainTable(tk.Frame):
 
         # Cabecera de columnas (clic = ordenar)
         hdr = tk.Frame(card, bg=S.BG_CARD)
-        hdr.pack(fill="x", padx=(20, 20))
+        hdr.pack(fill="x", padx=(13, 13))
         self._col_header(hdr, "LAST ACTIVITY", width=COL_DATE + 16, anchor="w",
                          sort_key="last_ts")
         self._col_header(hdr, "PROJECT", width=COL_PROJ, anchor="w",
@@ -210,11 +233,11 @@ class MainTable(tk.Frame):
                          sort_key="message_count")
         self._col_header(hdr, "SESSION", width=0, anchor="w", expand=True,
                          sort_key="display_name")
-        tk.Frame(card, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=20, pady=(6, 0))
+        tk.Frame(card, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=13, pady=(6, 0))
 
         # Lista
         self._list = ScrollableFrame(card, bg=S.BG_CARD)
-        self._list.pack(fill="both", expand=True, padx=(14, 8), pady=(2, 10))
+        self._list.pack(fill="both", expand=True, padx=(8, 4), pady=(2, 4))
         self._list.canvas.bind("<Configure>", self._on_canvas_resize, add="+")
 
         # Estado vacío
@@ -253,6 +276,31 @@ class MainTable(tk.Frame):
                 lbl.config(text=base + arrow, fg=S.ACCENT_SOFT)
             else:
                 lbl.config(text=base, fg=S.TEXT_FAINT)
+
+    # ── Overlay de la tarjeta (contorno redondeado sobre el fondo vivo) ───────
+    def _on_card_configure(self, _):
+        if self._card_after:
+            self.after_cancel(self._card_after)
+        self._card_after = self.after(90, self._draw_card_overlay)
+
+    def _draw_card_overlay(self):
+        """Redibuja la imagen RGBA del contorno (sombra + bisel + borde) en el
+        canvas del fondo, ajustada a la posición/tamaño actual del Frame. Sólo
+        corre al cambiar la geometría (debounced) → coste cero por fotograma."""
+        self._card_after = None
+        x, y = self._card.winfo_x(), self._card.winfo_y()
+        w, h = self._card.winfo_width(), self._card.winfo_height()
+        if w <= 1 or h <= 1:
+            return
+        pad = CARD_INSET + CARD_SHADOW
+        self._card_photo = rounded_card_image(
+            w + 2 * pad, h + 2 * pad, radius=S.RADIUS_CARD, margin=CARD_SHADOW)
+        if self._card_item is None:
+            self._card_item = self._bg.create_image(x - pad, y - pad, anchor="nw",
+                                                    image=self._card_photo)
+        else:
+            self._bg.coords(self._card_item, x - pad, y - pad)
+            self._bg.itemconfig(self._card_item, image=self._card_photo)
 
     # ── Búsqueda (debounced) ──────────────────────────────────────────────────
     def _debounce_search(self):
