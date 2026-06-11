@@ -26,8 +26,11 @@ CARD_BORDER = "#141b2d"   # borde lateral suave de la tarjeta
 # ── Filas de la tabla (zebra striping muy sutil + estados) ───────────────────
 ROW_EVEN  = "#070b15"   # fila par   (apenas por encima de BG_DEEP)
 ROW_ODD   = "#0a0f1c"   # fila impar (zebra sutil)
-ROW_HOVER = "#121a2e"   # fila bajo el cursor
+ROW_HOVER = "#0d1324"   # fila bajo el cursor (casi imperceptible: el feedback
+                        # principal es la barra de acento, no el fondo)
 ROW_SEL   = "#1a2342"   # fila seleccionada (glow índigo)
+ROW_BAR   = "#222b44"   # barra de acento en reposo (gris azulado apagado);
+                        # en hover pasa a ACCENT_SOFT y en selección a ACCENT
 
 # ── Acentos ──────────────────────────────────────────────────────────────────
 ACCENT        = "#6366f1"  # índigo principal (CTA, selección, foco)
@@ -52,6 +55,11 @@ SEL_TEXT   = "#dbe4ff"   # texto sobre fila seleccionada
 BORDER      = "#1e293b"   # borde sutil de paneles e inputs
 BORDER_SOFT = "#141c2b"   # separadores casi invisibles
 BORDER_FOCUS= ACCENT      # focus ring de inputs
+
+# Separadores con relieve (bisel falso de 2 px: arista clara + sombra) — dan
+# profundidad de vidrio grabado sin imágenes ni coste de render.
+DIVIDER_LIGHT = "#1c2540"   # arista superior (capta la luz)
+DIVIDER_DARK  = "#04070f"   # sombra inferior (hunde la línea en el panel)
 
 # ── Chips / badges discretos ─────────────────────────────────────────────────
 CHIP_BG     = "#161b2c"
@@ -128,13 +136,24 @@ CHIP_COLORS = [
 #  TIPOGRAFÍA
 # ══════════════════════════════════════════════════════════════════════════════
 
-FONT_UI   = "Segoe UI"     # interfaz general
-FONT_MONO = "Consolas"     # rutas, código, preview de bloques
+FONT_UI      = "Segoe UI"           # interfaz general (sans-serif estricta)
+FONT_UI_SEMI = "Segoe UI Semibold"  # peso intermedio real (familia aparte en Windows)
+FONT_MONO    = "Consolas"           # rutas, código, preview de bloques
+
+_SEMI_OK = True   # init_ttk_styles() lo verifica contra las familias instaladas
 
 
 def font(size=10, weight="normal", *, family=FONT_UI):
     """Atajo para construir tuplas de fuente tkinter."""
     return (family, size, weight)
+
+
+def semi(size=10):
+    """Sans semibold: jerarquía por peso sin engordar a bold pleno.
+    Si la familia Semibold no está instalada, cae a Segoe UI bold."""
+    if _SEMI_OK:
+        return (FONT_UI_SEMI, size, "normal")
+    return (FONT_UI, size, "bold")
 
 
 def mono(size=10, weight="normal"):
@@ -146,7 +165,15 @@ def mono(size=10, weight="normal"):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def init_ttk_styles(root):
-    """Configura el tema 'clam' y las scrollbars glass casi invisibles."""
+    """Configura el tema 'clam' y las scrollbars glass casi invisibles.
+    También resuelve si la familia Semibold existe (para `semi()`)."""
+    global _SEMI_OK
+    try:
+        from tkinter import font as tkfont
+        _SEMI_OK = FONT_UI_SEMI in tkfont.families(root)
+    except Exception:
+        _SEMI_OK = False
+
     style = ttk.Style(root)
     try:
         style.theme_use("clam")

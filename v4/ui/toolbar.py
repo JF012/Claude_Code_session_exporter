@@ -34,16 +34,18 @@ class Toolbar(tk.Frame):
         self._btn_export.pack(side="right")
         self._btn_export.set_enabled(False)
 
+        # Utilidades en ghost: invisibles en reposo (sólo texto), pastilla
+        # BG_ELEV al pasar el cursor → menos carga visual estática en la barra.
         RoundedButton(row, "⤓  Export all", on_export_all,
                       variant="secondary", font_size=9).pack(side="right", padx=(0, 11))
         RoundedButton(row, "🔗  Desktop shortcut", on_shortcut,
-                      variant="flat", font_size=9).pack(side="right", padx=(0, 11))
+                      variant="ghost", font_size=9).pack(side="right", padx=(0, 11))
 
         # Acciones sobre la ruta (junto al campo)
         RoundedButton(row, "Open", on_open_dir,
-                      variant="flat", font_size=9).pack(side="right", padx=(14, 8))
+                      variant="ghost", font_size=9).pack(side="right", padx=(14, 8))
         RoundedButton(row, "Change", on_change_dir,
-                      variant="flat", font_size=9).pack(side="right")
+                      variant="ghost", font_size=9).pack(side="right")
 
         # El campo de ruta ocupa el centro
         self._field.pack(side="left", fill="x", expand=True, padx=(0, 16))

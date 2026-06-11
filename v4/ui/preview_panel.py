@@ -11,7 +11,7 @@ import tkinter as tk
 
 import styles as S
 from core.exporter import session_to_markdown
-from widgets import GlassScrollbar
+from widgets import GlassScrollbar, bevel_divider
 
 WIDTH = 366
 MAX_CHARS = 16000          # corta previews enormes para mantener la fluidez
@@ -29,15 +29,16 @@ class PreviewPanel(tk.Frame):
                  font=S.font(13)).pack(side="left", padx=(0, 9))
         tk.Label(head, text="Export preview", bg=S.BG_GLASS, fg=S.TEXT,
                  font=S.font(11, "bold")).pack(side="left")
-        tk.Frame(self, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=16)
+        bevel_divider(self, bg=S.BG_GLASS, padx=20)
 
-        # Texto
+        # Texto (spacing1/2/3 generosos: el Markdown respira sin coste alguno)
         body = tk.Frame(self, bg=S.BG_GLASS)
         body.pack(fill="both", expand=True, padx=(14, 6), pady=10)
         self._text = tk.Text(
             body, bg=S.BG_GLASS, fg=S.TEXT_SOFT, bd=0, relief="flat",
             highlightthickness=0, wrap="word", padx=8, pady=6,
-            font=S.font(10), insertwidth=0, cursor="arrow", spacing1=1, spacing3=2,
+            font=S.font(10), insertwidth=0, cursor="arrow",
+            spacing1=3, spacing2=2, spacing3=3,
         )
         sb = GlassScrollbar(body, self._text.yview, bg=S.BG_GLASS)
         self._text.configure(yscrollcommand=sb.set)
@@ -56,7 +57,8 @@ class PreviewPanel(tk.Frame):
         t.tag_configure("h2", font=S.font(11, "bold"), foreground=S.ACCENT_SOFT,
                         spacing1=10, spacing3=4)
         t.tag_configure("quote", font=S.font(9), foreground=S.TEXT_MUTE,
-                        lmargin1=10, lmargin2=10, spacing1=1)
+                        lmargin1=10, lmargin2=10, spacing1=2, spacing2=2,
+                        spacing3=2)
         t.tag_configure("code", font=S.mono(9), foreground="#a5b4fc",
                         background=S.BG_DEEP, lmargin1=12, lmargin2=12,
                         spacing1=0, spacing3=0)
@@ -64,7 +66,8 @@ class PreviewPanel(tk.Frame):
         t.tag_configure("bold", font=S.font(10, "bold"), foreground=S.TEXT)
         t.tag_configure("icode", font=S.mono(9), foreground=S.ACCENT_VIOLET,
                         background=S.BG_DEEP)
-        t.tag_configure("normal", foreground=S.TEXT_SOFT, spacing1=1, spacing3=1)
+        t.tag_configure("normal", foreground=S.TEXT_SOFT, spacing1=2, spacing2=2,
+                        spacing3=2)
         t.tag_configure("muted", foreground=S.TEXT_DIM, font=S.font(9))
 
     # ── API pública ───────────────────────────────────────────────────────────

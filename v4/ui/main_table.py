@@ -15,7 +15,7 @@ import tkinter.font as tkfont
 import styles as S
 from core.utils import format_ts
 from widgets import (FocusField, ScrollableFrame, make_chip, make_badge,
-                     Tooltip, rounded_card_image, HAS_PIL)
+                     Tooltip, rounded_card_image, bevel_divider, HAS_PIL)
 from ui.living_background import LivingBackground
 
 # Anchos fijos (px) de las columnas no elásticas; la sesión ocupa el resto.
@@ -66,8 +66,9 @@ class SessionRow(tk.Frame):
         super().__init__(parent, bg=self._base_bg, height=ROW_H, cursor="hand2")
         self.pack_propagate(False)
 
-        # Barra de acento (selección)
-        self._bar = tk.Frame(self, bg=self._base_bg, width=3)
+        # Barra de acento: gris apagado en reposo → índigo en hover/selección.
+        # Es el feedback principal de la fila (el fondo apenas cambia).
+        self._bar = tk.Frame(self, bg=S.ROW_BAR, width=3)
         self._bar.pack(side="left", fill="y")
 
         inner = tk.Frame(self, bg=self._base_bg)
@@ -104,7 +105,7 @@ class SessionRow(tk.Frame):
         scell.pack(side="left", fill="both", expand=True, padx=(2, 10))
         self._scell = scell
         self._title = tk.Label(scell, text="", bg=self._base_bg, fg=S.TEXT,
-                               font=S.font(10), anchor="w")
+                               font=S.semi(10), anchor="w")
         self._title.pack(fill="x", anchor="w", pady=(11, 0))
         self._preview = tk.Label(scell, text="", bg=self._base_bg, fg=S.TEXT_DIM,
                                  font=S.font(9), anchor="w")
@@ -147,18 +148,52 @@ class SessionRow(tk.Frame):
 
     def _on_enter(self, _):
         if not self._selected:
-            self._paint(S.ROW_HOVER, S.BORDER, S.TEXT, S.TEXT_MUTE, S.TEXT_MUTE)
+            self._paint(S.ROW_HOVER, S.ACCENT_SOFT, S.TEXT, S.TEXT_MUTE, S.TEXT_MUTE)
 
     def _on_leave(self, _):
         if not self._selected:
-            self._paint(self._base_bg, self._base_bg, S.TEXT, S.TEXT_DIM, S.TEXT_DIM)
+            self._paint(self._base_bg, S.ROW_BAR, S.TEXT, S.TEXT_DIM, S.TEXT_DIM)
 
     def set_selected(self, on: bool):
         self._selected = on
         if on:
             self._paint(S.ROW_SEL, S.ACCENT, S.SEL_TEXT, S.TEXT_MUTE, S.TEXT_MUTE)
         else:
-            self._paint(self._base_bg, self._base_bg, S.TEXT, S.TEXT_DIM, S.TEXT_DIM)
+            self._paint(self._base_bg, S.ROW_BAR, S.TEXT, S.TEXT_DIM, S.TEXT_DIM)
+
+
+class _SkeletonRow(tk.Frame):
+    """Fila fantasma para el estado de carga: bloques BG_ELEV estáticos con la
+    misma geometría que SessionRow. La lista nunca se ve vacía mientras el hilo
+    escanea, así la apertura se percibe instantánea. Cero animación, cero coste."""
+    def __init__(self, parent, index):
+        base = S.ROW_EVEN if index % 2 == 0 else S.ROW_ODD
+        super().__init__(parent, bg=base, height=ROW_H)
+        self.pack_propagate(False)
+        tk.Frame(self, bg=S.ROW_BAR, width=3).pack(side="left", fill="y")
+        inner = tk.Frame(self, bg=base)
+        inner.pack(side="left", fill="both", expand=True, padx=(13, 14))
+
+        def cell(width):
+            c = tk.Frame(inner, bg=base, width=width)
+            c.pack(side="left", fill="y")
+            c.pack_propagate(False)
+            return c
+
+        # Fecha · chip de proyecto · badge (anchos reales de las columnas)
+        tk.Frame(cell(COL_DATE), bg=S.BG_ELEV, width=72, height=9).pack(side="left")
+        tk.Frame(cell(COL_PROJ), bg=S.BG_ELEV, width=92, height=18).pack(side="left")
+        mcell = tk.Frame(inner, bg=base, width=COL_MSGS)
+        mcell.pack(side="right", fill="y")
+        mcell.pack_propagate(False)
+        tk.Frame(mcell, bg=S.BG_ELEV, width=30, height=16).pack(side="right")
+
+        # Sesión: título ancho + preview más corto (elásticos, como la real)
+        scell = tk.Frame(inner, bg=base)
+        scell.pack(side="left", fill="both", expand=True, padx=(2, 10))
+        tk.Frame(scell, bg=S.BG_ELEV, height=10).pack(fill="x", padx=(0, 70),
+                                                      pady=(16, 7))
+        tk.Frame(scell, bg=S.BG_ELEV, height=8).pack(fill="x", padx=(0, 150))
 
 
 class MainTable(tk.Frame):
@@ -175,8 +210,9 @@ class MainTable(tk.Frame):
         self._headers = {}          # sort_key → (label, base_text)
         self._active_sort = "last_ts"
 
-        # Fuentes de medición (compartidas por todas las filas)
-        self._f_title = tkfont.Font(family=S.FONT_UI, size=10)
+        # Fuentes de medición (compartidas por todas las filas; la del título
+        # debe coincidir con S.semi(10) o el truncado quedaría corto/largo)
+        self._f_title = tkfont.Font(font=S.semi(10))
         self._f_prev  = tkfont.Font(family=S.FONT_UI, size=9)
 
         # ── Fondo vivo (capa inferior; asoma sólo por los márgenes) ───────────
@@ -233,16 +269,15 @@ class MainTable(tk.Frame):
                          sort_key="message_count")
         self._col_header(hdr, "SESSION", width=0, anchor="w", expand=True,
                          sort_key="display_name")
-        tk.Frame(card, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=13, pady=(6, 0))
+        bevel_divider(card, bg=S.BG_CARD, padx=13, pady=(6, 0))
 
         # Lista
         self._list = ScrollableFrame(card, bg=S.BG_CARD)
         self._list.pack(fill="both", expand=True, padx=(8, 4), pady=(2, 4))
         self._list.canvas.bind("<Configure>", self._on_canvas_resize, add="+")
 
-        # Estado vacío
-        self._empty = tk.Label(self._list.body, text="", bg=S.BG_CARD, fg=S.TEXT_DIM,
-                               font=S.font(10), justify="center")
+        # Estado vacío (se construye bajo demanda en set_sessions)
+        self._empty = None
 
     def _col_header(self, parent, text, *, width, anchor, expand=False,
                     side="left", sort_key=None):
@@ -318,6 +353,57 @@ class MainTable(tk.Frame):
         for row in self._rows:
             row.set_width(width)
 
+    # ── Estado de carga (skeleton) ────────────────────────────────────────────
+    def show_skeleton(self, count=4):
+        """Filas fantasma mientras el hilo escanea: la lista nunca se ve vacía
+        y la apertura/recarga se percibe instantánea."""
+        self._list.clear()
+        self._rows = []
+        self._selected_row = None
+        self._empty = None
+        for i in range(count):
+            _SkeletonRow(self._list.body, i).pack(fill="x")
+
+    # ── Estado vacío (icono minimalista dibujado en Canvas) ───────────────────
+    @staticmethod
+    def _round_rect(c, x0, y0, x1, y1, r, *, outline, fill=None, width=2):
+        """Rectángulo redondeado en un Canvas: relleno (2 rects + 4 óvalos) y/o
+        contorno (4 arcos + 4 líneas). Geometría tk pura, sin imágenes."""
+        if fill is not None:
+            c.create_rectangle(x0 + r, y0, x1 - r, y1, fill=fill, outline="")
+            c.create_rectangle(x0, y0 + r, x1, y1 - r, fill=fill, outline="")
+            for (cx, cy) in ((x0, y0), (x1 - 2 * r, y0), (x0, y1 - 2 * r),
+                             (x1 - 2 * r, y1 - 2 * r)):
+                c.create_oval(cx, cy, cx + 2 * r, cy + 2 * r, fill=fill, outline="")
+        if outline:
+            for (ax, ay, start) in ((x0, y0, 90), (x1 - 2 * r, y0, 0),
+                                    (x0, y1 - 2 * r, 180), (x1 - 2 * r, y1 - 2 * r, 270)):
+                c.create_arc(ax, ay, ax + 2 * r, ay + 2 * r, start=start, extent=90,
+                             style="arc", outline=outline, width=width)
+            c.create_line(x0 + r, y0, x1 - r, y0, fill=outline, width=width)
+            c.create_line(x0 + r, y1, x1 - r, y1, fill=outline, width=width)
+            c.create_line(x0, y0 + r, x0, y1 - r, fill=outline, width=width)
+            c.create_line(x1, y0 + r, x1, y1 - r, fill=outline, width=width)
+
+    def _build_empty_state(self):
+        """Pila de documentos minimalista (TEXT_FAINT) + mensaje."""
+        box = tk.Frame(self._list.body, bg=S.BG_CARD)
+        icon = tk.Canvas(box, width=88, height=80, bg=S.BG_CARD,
+                         highlightthickness=0, bd=0)
+        icon.pack()
+        # Hoja trasera (asoma por detrás) + hoja frontal rellena que la tapa
+        self._round_rect(icon, 30, 6, 74, 56, 7, outline=S.TEXT_FAINT)
+        self._round_rect(icon, 16, 18, 60, 72, 7, outline=S.TEXT_FAINT,
+                         fill=S.BG_CARD)
+        for i, x1 in enumerate((48, 48, 38)):     # líneas de "texto"
+            y = 32 + i * 11
+            icon.create_line(26, y, x1, y, fill=S.TEXT_FAINT, width=2)
+        tk.Label(box, text="No sessions found", bg=S.BG_CARD, fg=S.TEXT_MUTE,
+                 font=S.semi(11)).pack(pady=(14, 3))
+        tk.Label(box, text="Try a different search term or refresh.",
+                 bg=S.BG_CARD, fg=S.TEXT_DIM, font=S.font(9)).pack()
+        return box
+
     # ── Población ─────────────────────────────────────────────────────────────
     def set_sessions(self, sessions, *, subtitle_total=None):
         self._list.clear()
@@ -328,12 +414,8 @@ class MainTable(tk.Frame):
                            else f"{len(sessions)} / {total}")
 
         if not sessions:
-            self._empty = tk.Label(
-                self._list.body,
-                text="\n\n( ︶ )\n\nNo sessions match your search.\n"
-                     "Try a different search term.",
-                bg=S.BG_CARD, fg=S.TEXT_DIM, font=S.font(10), justify="center")
-            self._empty.pack(pady=60)
+            self._empty = self._build_empty_state()
+            self._empty.pack(pady=52)
             return
 
         shown = sessions[:MAX_ROWS]

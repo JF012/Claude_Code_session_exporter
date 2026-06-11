@@ -160,6 +160,25 @@ def rounded_card_image(w, h, *, radius, margin, surface=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  SEPARADOR CON RELIEVE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def bevel_divider(parent, *, bg, padx=20, pady=0):
+    """Separador de 2 px con bisel falso: arista clara sobre sombra oscura.
+
+    Simula una línea grabada en el vidrio (en vez del BORDER_SOFT plano) usando
+    dos Frames de 1 px — cero imágenes, cero coste de render. Los márgenes
+    laterales lo integran como elemento de diseño: no corta el panel de lado a
+    lado. Se empaqueta solo (fill="x"); devuelve el contenedor por si acaso.
+    """
+    wrap = tk.Frame(parent, bg=bg)
+    tk.Frame(wrap, bg=S.DIVIDER_LIGHT, height=1).pack(fill="x")
+    tk.Frame(wrap, bg=S.DIVIDER_DARK, height=1).pack(fill="x")
+    wrap.pack(fill="x", padx=padx, pady=pady)
+    return wrap
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  BOTÓN
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -267,15 +286,21 @@ class _RoundedButtonCanvas(tk.Canvas):
             fill, border, fg = s["hover_bg"], s["hover_border"], s["hover_fg"]
         else:
             fill, border, fg = s["bg"], s["border"], s["fg"]
-        r = min(h // 2, S.RADIUS_CTRL)
-        self._photo = _rounded_btn_image(
-            w, h, r, _hex_to_rgb(fill), _hex_to_rgb(border), 1,
-            _hex_to_rgb(self._surface))
-        if self._img_id is None:
-            self._img_id = self.create_image(0, 0, anchor="nw", image=self._photo)
+        # Ghost en reposo: relleno == superficie → sin pastilla, sólo texto
+        # (presencia visual nula hasta que el cursor entra).
+        if fill == self._surface and border == self._surface:
+            if self._img_id is not None:
+                self.itemconfigure(self._img_id, state="hidden")
         else:
-            self.itemconfig(self._img_id, image=self._photo)
-        self.tag_lower(self._img_id)
+            r = min(h // 2, S.RADIUS_CTRL)
+            self._photo = _rounded_btn_image(
+                w, h, r, _hex_to_rgb(fill), _hex_to_rgb(border), 1,
+                _hex_to_rgb(self._surface))
+            if self._img_id is None:
+                self._img_id = self.create_image(0, 0, anchor="nw", image=self._photo)
+            else:
+                self.itemconfig(self._img_id, image=self._photo, state="normal")
+            self.tag_lower(self._img_id)
         self.coords(self._txt_id, w // 2, h // 2)
         self.itemconfig(self._txt_id, fill=fg, text=self._text)
         self.tag_raise(self._txt_id)

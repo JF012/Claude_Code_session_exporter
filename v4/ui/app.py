@@ -125,26 +125,32 @@ class App(tk.Tk):
     def _load_sessions(self):
         self._status.spin("Scanning Claude Code sessions…")
         self._toolbar.set_export_enabled(False)
+        self._table.show_skeleton()      # filas fantasma mientras corre el escaneo
 
         def worker():
             claude_dir = find_claude_dir()
             if not claude_dir:
-                self.after(0, lambda: self._status.error(
+                self.after(0, lambda: self._scan_failed(
                     "Couldn't find ~/.claude — is Claude Code installed?"))
                 return
             projects = claude_dir / "projects"
             if not projects.exists():
-                self.after(0, lambda: self._status.error(
+                self.after(0, lambda: self._scan_failed(
                     f"'projects' folder not found in {claude_dir}"))
                 return
             try:
                 sessions = gather_all_sessions(projects)
             except Exception as e:
-                self.after(0, lambda: self._status.error(f"Failed to read sessions: {e}"))
+                self.after(0, lambda: self._scan_failed(f"Failed to read sessions: {e}"))
                 return
             self.after(0, lambda: self._on_sessions_loaded(sessions))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _scan_failed(self, msg):
+        """Quita el skeleton (muestra el estado vacío) y reporta el error."""
+        self._table.set_sessions([])
+        self._status.error(msg)
 
     def _on_sessions_loaded(self, sessions):
         self._all_sessions = sessions

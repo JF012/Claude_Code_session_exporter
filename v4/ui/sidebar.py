@@ -12,7 +12,7 @@ import tkinter as tk
 
 import styles as S
 from core.utils import lerp_rgb, rgb_hex
-from widgets import make_badge, ScrollableFrame, RoundedButton
+from widgets import make_badge, ScrollableFrame, RoundedButton, bevel_divider
 
 WIDTH = 248
 
@@ -54,8 +54,9 @@ class _NavRow(tk.Frame):
         self._bar.config(bg=bar)
 
     def _on_enter(self, _):
+        # Mismo lenguaje que SessionRow: fondo apenas elevado + barra índigo.
         if not self._selected:
-            self._paint(S.ROW_HOVER, S.TEXT, S.BORDER)
+            self._paint(S.BG_ELEV, S.TEXT, S.ACCENT_SOFT)
 
     def _on_leave(self, _):
         if not self._selected:
@@ -79,7 +80,7 @@ class Sidebar(tk.Frame):
         self._selected_index = 0
 
         self._build_brand()
-        tk.Frame(self, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=16)
+        bevel_divider(self, bg=S.BG_PANEL, padx=20)
 
         # Encabezado de sección
         head = tk.Frame(self, bg=S.BG_PANEL)
@@ -95,7 +96,7 @@ class Sidebar(tk.Frame):
         self._list.pack(fill="both", expand=True, padx=(8, 6))
 
         # Pie: recargar
-        tk.Frame(self, bg=S.BORDER_SOFT, height=1).pack(fill="x", padx=16)
+        bevel_divider(self, bg=S.BG_PANEL, padx=20)
         foot = tk.Frame(self, bg=S.BG_PANEL)
         foot.pack(fill="x", padx=14, pady=14)
         RoundedButton(foot, "↻  Refresh sessions", self._on_reload,
