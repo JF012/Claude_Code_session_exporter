@@ -26,8 +26,20 @@ Apertura ligera (la app debe sentirse instantánea al abrir):
     y con la app sin foco la animación baja a ~12 fps (misma velocidad de
     deriva, menos CPU); recupera 60 fps al volver el foco.
 
-El loop es perfectamente periódico (toda deriva es sin(2π·k·i/N) con k entero),
-así que al volver al fotograma 0 no hay salto. La paleta vive en `styles.py`.
+Contenido del loop (portado del fondo de la extensión web, popup.html):
+  · Gradiente base ANIMADO: el lienzo del degradado es mayor que el frame
+    (análogo a background-size:400%) y cada fotograma recorta una ventana cuyo
+    origen orbita en elipse → el degradado "pasea" en diagonal (gradientShift)
+    con un coste por frame de un simple crop.
+  · Orbes con movimiento INDEPENDIENTE (como .orb-1..4 / float1..4): cada uno
+    suma dos armónicos por eje con frecuencias enteras y fases propias, más
+    respiración de tamaño y, en algunos, pulso de opacidad. Nunca sincronizan.
+  · Partículas ascendentes (las .particle / keyframe rise): polvo de 2-3 px que
+    sube con duración, retardo y vaivén propios, compuesto DESPUÉS del blur.
+
+El loop es perfectamente periódico (toda deriva es sin(2π·k·i/N) con k entero,
+y las partículas hacen un nº entero de travesías por loop), así que al volver
+al fotograma 0 no hay salto. La paleta vive en `styles.py`.
 
 Se coloca DETRÁS del contenido del área central y asoma por la banda hero (sobre
 el buscador) y los márgenes. Si Pillow no estuviera disponible, cae a un degradado
@@ -56,28 +68,86 @@ LOOP_FRAMES = 260       # fotogramas del loop → ~4.3 s a 60 fps (deriva lenta)
 IW, IH      = 224, 216  # lienzo interno (baja res); se estira al tamaño real.
                         # Tras el blur + upscale BILINEAR el resultado es
                         # indistinguible de 252×240 y el horneado baja ~25 %.
-DRIFT_M     = 16        # margen vertical para la respiración del gradiente (px)
 BLUR        = IW * 0.058  # radio de blur ≈ filter: blur() de la extensión
 GLOW_D      = 200       # diámetro del glow radial base (se reescala por orbe)
 BUILD_DELAY_MS = 160    # respiro para el primer pintado + arranque del escaneo
+TAU         = 2 * math.pi
+
+# Paneo del gradiente (gradientShift de la extensión): margen extra del lienzo
+# del degradado en cada eje; el origen del recorte lo recorre en elipse.
+GRAD_PAN_X  = 64
+GRAD_PAN_Y  = 40
+GRAD_DIAG   = 0.35      # inclinación del eje del degradado (≈135°, como el CSS)
 
 # Orbes: glow radial índigo/violeta compuesto por alpha (como las .orb de la
 # extensión: radial-gradient + opacity). Bias a la banda hero (arriba) y a los
 # márgenes —donde el fondo asoma de verdad—; abajo queda oscuro (lo tapa la tabla).
-#   color,        alpha, ax,    ay,    rad,  drx,  dry,  bre,  fx, fy, fb, phase
+#
+# Movimiento independiente (float1..4 con duraciones 5-8 s): la deriva por eje
+# es la SUMA de dos armónicos con frecuencia entera (k ciclos/loop → cierre
+# perfecto) y fase propia; al no compartir (k, fase) ningún par de orbes se
+# sincroniza dentro del loop. `breathe` escala el tamaño (el scale() de los
+# keyframes) y `pulse` late la opacidad (como float3/float4) o es None.
+#   color, alpha, ax, ay, rad,
+#   hx = ((amp, k, fase), (amp, k, fase))   ← deriva X, relativa a IW
+#   hy = ídem para Y (cos), relativa a IH
+#   breathe = (amp, k, fase) · pulse = (amp, k, fase) | None
 _ORBS = [
-    (S.ACCENT,        0.95, 0.50,  0.00, 0.62, 0.05, 0.06, 0.10, 1, 1, 2, 0.0),  # hero central · índigo
-    (S.ACCENT_SOFT,   0.92, 0.13,  0.04, 0.40, 0.06, 0.05, 0.12, 1, 2, 2, 1.1),  # hero izq · índigo claro
-    (S.ACCENT_VIOLET, 0.90, 0.88,  0.05, 0.40, 0.06, 0.05, 0.12, 2, 1, 2, 2.0),  # hero der · violeta
-    (S.ACCENT_VIOLET, 0.70, 0.30,  0.02, 0.30, 0.07, 0.05, 0.14, 2, 1, 3, 3.1),  # acento hero · violeta
-    (S.ACCENT_SOFT,   0.70, 0.70,  0.03, 0.30, 0.07, 0.05, 0.14, 1, 2, 3, 0.7),  # acento hero · índigo claro
-    (S.ACCENT,        0.58, -0.04, 0.46, 0.34, 0.04, 0.08, 0.12, 1, 1, 2, 2.4),  # margen izq · índigo
-    (S.ACCENT,        0.58, 1.04,  0.52, 0.34, 0.04, 0.08, 0.12, 1, 1, 2, 1.2),  # margen der · índigo
+    (S.ACCENT,        0.95, 0.50,  0.00, 0.62,                                 # hero central · índigo
+     ((0.045, 1, 0.0), (0.016, 3, 1.9)), ((0.050, 1, 1.6), (0.018, 2, 0.7)),
+     (0.09, 2, 0.0),  None),
+    (S.ACCENT_SOFT,   0.92, 0.13,  0.04, 0.40,                                 # hero izq · índigo claro
+     ((0.055, 1, 1.1), (0.020, 4, 0.3)), ((0.042, 2, 2.2), (0.015, 3, 1.2)),
+     (0.11, 3, 1.1),  None),
+    (S.ACCENT_VIOLET, 0.90, 0.88,  0.05, 0.40,                                 # hero der · violeta (late)
+     ((0.050, 2, 2.0), (0.018, 3, 2.8)), ((0.048, 1, 0.4), (0.016, 4, 1.7)),
+     (0.10, 2, 2.0),  (0.10, 1, 0.9)),
+    (S.ACCENT_VIOLET, 0.70, 0.30,  0.02, 0.30,                                 # acento hero · violeta (late)
+     ((0.060, 1, 3.1), (0.022, 5, 1.4)), ((0.040, 2, 0.9), (0.014, 3, 2.5)),
+     (0.13, 3, 3.1),  (0.12, 2, 1.8)),
+    (S.ACCENT_SOFT,   0.70, 0.70,  0.03, 0.30,                                 # acento hero · índigo claro
+     ((0.055, 2, 0.7), (0.020, 3, 2.1)), ((0.045, 1, 2.6), (0.016, 5, 0.5)),
+     (0.12, 2, 0.7),  None),
+    (S.ACCENT,        0.58, -0.04, 0.46, 0.34,                                 # margen izq · índigo
+     ((0.030, 1, 2.4), (0.012, 2, 0.8)), ((0.065, 1, 1.0), (0.022, 3, 2.9)),
+     (0.10, 2, 2.4),  None),
+    (S.ACCENT,        0.58, 1.04,  0.52, 0.34,                                 # margen der · índigo
+     ((0.030, 1, 1.2), (0.012, 3, 2.3)), ((0.060, 1, 4.1), (0.020, 2, 1.5)),
+     (0.10, 3, 1.2),  None),
+]
+
+# Partículas ascendentes (las .particle de la extensión, keyframe `rise`):
+# polvo que sube de abajo a arriba con duración y retardo propios, vaivén
+# horizontal leve y el fade del CSS. `m` = travesías completas por loop
+# (entero → sin costura). Las X van sesgadas a los márgenes y la banda hero,
+# donde el fondo asoma de verdad (el centro lo tapa la tarjeta).
+#   x0,   m, delay, sway,  ks, fase, ø px, alpha, color
+_PARTICLES = [
+    (0.05, 1, 0.00, 0.012, 2, 0.4, 3, 0.70, S.ACCENT_SOFT),
+    (0.08, 1, 0.43, 0.010, 3, 2.1, 2, 0.55, S.ACCENT_VIOLET),
+    (0.03, 2, 0.15, 0.008, 2, 1.0, 2, 0.50, S.TEXT),
+    (0.93, 1, 0.27, 0.012, 2, 2.8, 3, 0.70, S.ACCENT_VIOLET),
+    (0.96, 1, 0.71, 0.010, 3, 0.9, 2, 0.55, S.ACCENT_SOFT),
+    (0.90, 2, 0.55, 0.008, 2, 1.9, 2, 0.50, S.TEXT),
+    (0.30, 1, 0.62, 0.014, 2, 3.2, 3, 0.60, S.ACCENT_SOFT),
+    (0.50, 1, 0.09, 0.012, 3, 1.5, 2, 0.55, S.ACCENT_VIOLET),
+    (0.70, 1, 0.84, 0.014, 2, 0.2, 3, 0.60, S.ACCENT_SOFT),
+    (0.85, 2, 0.36, 0.010, 3, 2.6, 2, 0.50, S.TEXT),
 ]
 
 
 def _smoothstep(t):
     return t * t * (3.0 - 2.0 * t)
+
+
+def _rise_alpha(p):
+    """Envolvente de opacidad del keyframe `rise` del popup: entra rápido
+    (0→0.8 al 10 %), decae lento (→0.3 al 90 %) y se apaga arriba (→0)."""
+    if p < 0.10:
+        return 0.8 * (p / 0.10)
+    if p < 0.90:
+        return 0.8 - 0.5 * ((p - 0.10) / 0.80)
+    return 0.3 * (1.0 - (p - 0.90) / 0.10)
 
 
 class LivingBackground(tk.Canvas):
@@ -121,16 +191,17 @@ class LivingBackground(tk.Canvas):
 
     # ── Pre-cálculo del loop (en hilo, sólo Pillow → sin tocar Tk) ─────────────
     def _build_frames(self):
-        grad = self._make_gradient()          # gradiente alto (con margen de deriva)
+        grad = self._make_gradient()          # lienzo del degradado (paneable)
         glow = self._make_glow()              # glow radial base (canal alpha)
-        first = self._compose(0, grad, glow)
+        sprites = self._make_particle_sprites()
+        first = self._compose(0, grad, glow, sprites)
         # El fotograma 0 se entrega ya: el fondo aparece compuesto (estático)
         # mientras el resto del loop se hornea. Al instalarse el loop completo
         # la animación continúa desde este mismo fotograma → sin salto.
         self._pending = [first]
         frames = [first]
         for i in range(1, LOOP_FRAMES):
-            frames.append(self._compose(i, grad, glow))
+            frames.append(self._compose(i, grad, glow, sprites))
             if i % 16 == 0:
                 time.sleep(0)                 # cede el GIL al escaneo y a la UI
         # Handoff seguro al hilo principal: asignación de referencia (atómica por
@@ -138,20 +209,36 @@ class LivingBackground(tk.Canvas):
         self._pending = frames
 
     def _make_gradient(self):
-        """Gradiente vertical índigo→oscuro, más alto que IH para poder respirar
-        (deriva vertical) recortándolo en distinta Y por fotograma."""
+        """Lienzo del degradado, mayor que el frame para poder panearlo.
+
+        Eje diagonal (≈135°, como el linear-gradient del popup) con tres
+        paradas —índigo hero, parada media con un matiz violeta, fondo casi
+        negro— evaluadas vía una LUT de 512 colores (barato aun siendo por
+        píxel) + dither sutil que rompe el banding. El paneo por fotograma es
+        un simple crop en `_compose`."""
+        gw, gh = IW + GRAD_PAN_X, IH + GRAD_PAN_Y
         top = _hex_to_rgb(S.LIVE_GRAD_TOP)
         bot = _hex_to_rgb(S.LIVE_GRAD_BOT)
-        gh = IH + 2 * DRIFT_M
+        mid = lerp_rgb(lerp_rgb(top, bot, 0.58), _hex_to_rgb(S.ACCENT_VIOLET), 0.10)
+        lut = []
+        for j in range(512):
+            te = (j / 511.0) ** 1.18     # ensancha el resplandor superior (hero)
+            if te < 0.58:
+                lut.append(lerp_rgb(top, mid, te / 0.58))
+            else:
+                lut.append(lerp_rgb(mid, bot, (te - 0.58) / 0.42))
+        norm = 511.0 / ((gh - 1) + GRAD_DIAG * (gw - 1))
+        xs = [GRAD_DIAG * x * norm for x in range(gw)]   # término X precomputado
         rnd = random.Random(7)           # determinista → loop reproducible
+        rand = rnd.random
         data = []
         for y in range(gh):
-            te = (y / (gh - 1)) ** 1.18  # ensancha el resplandor superior (hero)
-            r, g, b = lerp_rgb(top, bot, te)
-            for _ in range(IW):
-                j = rnd.randint(-2, 2)   # dither sutil → rompe el banding en zonas oscuras
+            base_d = y * norm
+            for x in range(gw):
+                r, g, b = lut[int(base_d + xs[x])]
+                j = int(rand() * 5.0) - 2   # dither ±2
                 data.append((r + j, g + j, b + j))
-        img = Image.new("RGB", (IW, gh))
+        img = Image.new("RGB", (gw, gh))
         img.putdata(data)
         return img
 
@@ -172,22 +259,66 @@ class LivingBackground(tk.Canvas):
                 px[x, y] = int(255 * v * v)   # núcleo denso, halo suave
         return g
 
-    def _compose(self, i, grad, glow):
-        """Compone un fotograma: gradiente (con deriva) + orbes por alpha + blur."""
-        p = i / LOOP_FRAMES
-        off = DRIFT_M + int(round(DRIFT_M * math.sin(2 * math.pi * p)))
-        base = grad.crop((0, off, IW, off + IH))
-        for (color, alpha, ax, ay, rad, drx, dry, bre, fx, fy, fb, ph) in _ORBS:
-            breathe = 1.0 + bre * math.sin(2 * math.pi * fb * p + ph)
+    def _make_particle_sprites(self):
+        """Mini-glows radiales (canal L), uno por diámetro de partícula: núcleo
+        denso + halo suave de 3× el núcleo. El upscale bilinear del frame los
+        deja como polvo flotante sin necesitar blur propio."""
+        sprites = {}
+        for d in {p[6] for p in _PARTICLES}:
+            s = d * 3
+            g = Image.new("L", (s, s), 0)
+            px = g.load()
+            c = (s - 1) / 2.0
+            for y in range(s):
+                for x in range(s):
+                    r = math.hypot(x - c, y - c) / (s / 2.0)
+                    if r < 1.0:
+                        v = _smoothstep(1.0 - r)
+                        px[x, y] = int(255 * v * v)
+            sprites[d] = g
+        return sprites
+
+    def _compose(self, i, grad, glow, sprites):
+        """Compone un fotograma: paneo del gradiente + orbes independientes +
+        blur + partículas (nítidas, por encima del blur)."""
+        t = i / LOOP_FRAMES
+        # Gradiente: el origen del recorte orbita en elipse por el lienzo
+        # extendido (versión suave del recorrido por esquinas de gradientShift).
+        ox = int(round(0.5 * GRAD_PAN_X * (1.0 + math.sin(TAU * t + 0.8))))
+        oy = int(round(0.5 * GRAD_PAN_Y * (1.0 + math.cos(TAU * t))))
+        base = grad.crop((ox, oy, ox + IW, oy + IH))
+
+        for (color, alpha, ax, ay, rad, hx, hy, (ba, bk, bp), pulse) in _ORBS:
+            breathe = 1.0 + ba * math.sin(TAU * bk * t + bp)
             size = max(8, int(2 * rad * IW * breathe))
-            cx = ax * IW + drx * IW * math.sin(2 * math.pi * fx * p + ph)
-            cy = ay * IH + dry * IH * math.cos(2 * math.pi * fy * p + ph)
+            cx = ax * IW + sum(a * IW * math.sin(TAU * k * t + p) for a, k, p in hx)
+            cy = ay * IH + sum(a * IH * math.cos(TAU * k * t + p) for a, k, p in hy)
+            a = alpha
+            if pulse is not None:
+                pa, pk, pp = pulse
+                a *= 1.0 + pa * math.sin(TAU * pk * t + pp)
             mask = glow.resize((size, size), Image.BILINEAR)
-            if alpha < 0.999:
-                mask = mask.point(lambda v, a=alpha: int(v * a))
+            if a < 0.999:
+                mask = mask.point(lambda v, f=a: int(v * f))
             sol = Image.new("RGB", (size, size), _hex_to_rgb(color))
             base.paste(sol, (int(cx - size / 2), int(cy - size / 2)), mask)
-        return base.filter(ImageFilter.GaussianBlur(BLUR))
+
+        out = base.filter(ImageFilter.GaussianBlur(BLUR))
+
+        # Partículas tras el blur: el polvo queda definido sobre el glow.
+        for (x0, m, delay, sway, ks, ph, d, pal, color) in _PARTICLES:
+            prog = (t * m + delay) % 1.0
+            a = _rise_alpha(prog) * pal
+            if a <= 0.01:
+                continue
+            spr = sprites[d]
+            s = spr.size[0]
+            x = x0 * IW + sway * IW * math.sin(TAU * ks * t + ph) - s / 2.0
+            y = IH - prog * (IH + s)        # de justo bajo el borde a justo sobre él
+            mask = spr.point(lambda v, f=a: int(v * f))
+            sol = Image.new("RGB", (s, s), _hex_to_rgb(color))
+            out.paste(sol, (int(x), int(y)), mask)
+        return out
 
     # ── Bucle de animación (hilo principal) ───────────────────────────────────
     def _start(self):
